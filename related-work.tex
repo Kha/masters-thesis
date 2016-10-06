@@ -1,0 +1,51 @@
+\section{Related Work}
+
+While this thesis presents the first verification tool for Rust programs, tools
+for many other imperative languages have been developed before.
+
+The Why3 project~\cite{bobot2011why3} is notable for its generality. It provides
+an imperative ML-like language \emph{WhyML} together with a verification
+condition generator that can interface with a multitude of both automatic and
+interactive theorem provers. While WhyML supports advanced language features such
+as type polymorphism and exceptions, it does not support higher-order functions,
+which are ubiquitous in Rust code.
+%Specification annotations of WhyML programs are written in the logic language \emph{Why3} and thus cannot 
+WhyML provides a reference type \texttt{ref} that can point to a fresh cell on
+the heap and is statically checked not to alias with other \texttt{ref}
+instances, but cannot point into some existing datum like Rust references can.
+For example, the first of the following two WhyML functions fails to type check
+because the array elements are not known to be alias-free, while the second one
+will return a reference to a \emph{copy} of \verb!a[i]!.
+
+\begin{minted}{sml}
+let get_mut (a : array (ref int)) (i : int) : ref int = a[i]
+let get_mut (a : array int) (i : int) : ref int = ref a[i]
+\end{minted}
+
+WhyML is also being used as an intermediate language for the verification of
+programs in Ada~\cite{guitton2011hi}, C~\cite{cuoq2012frama} and Java~\cite{filliatre2007krakatoa}.
+For the latter two languages, aliasing is reintroduced by way of an explicit heap.
+
+The remarkable SeL4 project~\cite{klein2009sel4} delivers a full formal verification of an operating
+system microkernel by way of multiple levels of program verification and
+refinement steps. The C code that produces the final kernel binary is verified
+by embedding it into the theorem prover
+Isabelle/HOL~\cite{nipkow2002isabelle}, using a deep embedding for statements
+and a shallow one for expressions. The C memory model used allows type-unsafe
+operations by use of a byte-size heap, but as with Why3, higher-order functions are
+not supported. The AutoCorres~\cite{greenaway2012bridging, greenaway2014don}
+tool then transforms this representation into a shallow monadic embedding,
+dealing with the `uninteresting complexities of C'~\cite{greenaway2014don} on the
+way. The result is an abstracted representation that is quite similar to ours
+(and in fact inspired it in part, as we shall note below), but doesn't go the
+last mile of completely eliminating the heap where possible. Without explicit
+no-alias annotations, the semantics of C would allow that in far fewer places than those
+of Rust in any case.
+
+It should be noted that our project, like most verification projects based on
+either embedding or code extraction, relies on both
+an unverified compiler and an unverified embedding tool, effectively making both
+part of the trusted computing base. SeL4 is a notable exception in this,
+providing (at lower optimization levels) a direct equivalence proof~\cite{sewell2013translation} between the
+produced kernel binary and the verified embedded code, thus completely removing
+the original C code from the trusted computing base.

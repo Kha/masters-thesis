@@ -1,7 +1,6 @@
 \documentclass[12pt,a4paper,twoside]{article}
 
-
-\usepackage[utf8]{inputenc}
+%\usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[english]{babel}
 \usepackage{lmodern}
@@ -19,6 +18,7 @@
 
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
+\usepackage{todonotes, minted}
 
 \clubpenalty = 10000
 \widowpenalty = 10000 \displaywidowpenalty = 10000
@@ -30,10 +30,6 @@
 
 \newcommand\ie{i.e.\ }
 \newcommand\eg{e.g.\ }
-
-\definecolor{todo}{rgb}{0.8,0,0}
-\newcommand\tod[1]{\texttt{\textcolor{todo}{#1}}}
-\newcommand\todo[1]{\par\texttt{\textcolor{todo}{#1}}\par}
 
   \begin{titlepage}
     \begin{tikzpicture}[remember picture,overlay]
@@ -118,7 +114,7 @@
 \begin{abstract}
   Imperative Programmiersprachen sind in der modernen Softwareentwicklung
   allgegenwärtig, stellen aber ein Hindernis für formale Softwareverifikation
-  dar durch ihre Verwendung von veränderbaren Variablen und Werten. Programme
+  dar durch ihre Verwendung von veränderbaren Variablen und Objekten. Programme
   in diesen Sprachen können normalerweise nicht direkt auf die unveränderliche
   Welt von Logik und Mathematik zurückgeführt werden, sondern müssen in eine
   explizit modellierte Semantik der jeweiligen Sprache eingebettet werden. Diese
@@ -129,7 +125,7 @@
   Die vorliegende Arbeit stellt einen Compiler von der imperativen
   Programmiersprache Rust in die pur funktionale Sprache des Theorembeweisers
   Lean vor, der nicht nur generell das erste Werkzeug zur Verifikation von Rust-Programmen
-  darstellt, sondern dies insbesondere auch
+  darstellt, sondern diese insbesondere auch
   mithilfe der von Lean bereitgestellten Standardwerkzeugen und -logik
   ermöglicht. Diese Transformation ist nur möglich durch spezielle Eigenschaften
   von allen validen Rust-Programmen, die die Veränderbarkeit von Werten auf
@@ -146,9 +142,10 @@
   Imperative programming, and aliasing in particular, represents a major
   obstacle in formally reasoning about everyday code. By utilizing restrictions
   the imperative programming language Rust imposes on mutable aliasing, we
-  present a scheme for transforming a large part of the Rust language into the
+  present a scheme for transforming a substantial part of the Rust language into the
   purely functional language of the Lean theorem prover. We use this scheme to
-  verify the correctness of real-world examples of Rust code. We furthermore
+  verify the correctness of real-world examples of Rust code without the need
+  for special semantics or logics. We furthermore
   show the extensibility of our transformation by incorporating an analysis of
   asymptotic runtimes.
 \end{abstract}
@@ -162,6 +159,27 @@
 \pagenumbering{arabic}
 
 \input{introduction}
+\newpage
+\input{related-work}
+\newpage
+
+\section{Background}
+\subsection{Rust}
+\subsection{Lean}
+
+\section{Basic Transformation}
+\label{sec:trans}
+
+\section{Case Study: Verification of \texttt{std::[T]::binary\_search}}
+\label{sec:binary_search}
+
+\section{Transformation of Mutable References}
+\label{sec:mutref}
+
+\section{Case Study: Verification of \texttt{fixedbitset}}
+\label{sec:fixedbitset}
+
+\section{Conclusion}
 
 \newpage
 \bibliographystyle{abbrv}
@@ -183,8 +201,3 @@ die Satzung des KIT zur Sicherung guter wissenschaftlicher Praxis beachtet habe.
   \end{tabbing}
 
 \end{document}
-
-%%% Local Variables:
-%%% mode: latex
-%%% TeX-master: t
-%%% End:
