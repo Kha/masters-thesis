@@ -105,7 +105,7 @@
   \end{titlepage}
 
 % sane default for proof documents
-\parindent 0pt\parskip 0.5ex
+%\parindent 0pt\parskip 0.5ex
 
 \tikzset{every node/.style={transform shape},auto,block/.style={align=center,rectangle,draw,minimum height=20pt,minimum width=30pt},>=triangle 60}
 %\pagenumbering{Roman}
@@ -164,6 +164,10 @@
 \newpage
 
 \section{Background}
+In this section, we give a basic introduction to our source and target
+languages. We will discuss finer semantic details where needed in
+\autoref{sec:trans} and \autoref{sec:mutref}.
+
 \subsection{Rust}
 \subsection{Lean}
 
@@ -178,8 +182,9 @@
 
 \section{Case Study: Verification of \texttt{fixedbitset}}
 \label{sec:fixedbitset}
+\todo{I have no idea where to put the complexity analysis}
 
-\section{Conclusion}
+\section{Conclusion and Future Work}
 
 \newpage
 \bibliographystyle{abbrv}

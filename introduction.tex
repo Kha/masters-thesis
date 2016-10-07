@@ -37,11 +37,16 @@ possibility of data races and other common bugs created by the presence of
 mutable sharing such as iterator invalidation. It furthermore enables more
 aggressive optimizations.
 
-We utilize Rust's aliasing restriction to design a monadic shallow embedding of a
+While the full Rust language also provides raw pointers, which are not bound by
+the aliasing restriction, and other ``unsafe'' operations, a (informal or formal)
+memory model for Rust has yet to be proposed. We therefore focus on the ``safe''
+subset of Rust that has no unsolved semantic details.
+
+We utilize safe Rust's aliasing restriction to design a monadic shallow embedding of a
 substantial subset of Rust
 into the purely functional language of the Lean theorem prover without the need
-for any heap-like indirection or an explicit memory model. This allows us to
-reason about unannotated, real-world Rust code in the same manner one would
+for any heap-like indirection. This allows us to
+reason about unannotated, real-world Rust code in mostly the same manner one would
 reason about native Lean definitions. The monadic approach gives us further
 flexibility in modeling additional effects such as function runtime.
 
@@ -51,4 +56,4 @@ show their application by giving a formal verification of Rust's
 \verb!std::[T]::binary_search! method in \autoref{sec:binary_search}.
 \autoref{sec:mutref} discusses the translation of most usages of mutable
 references, which is used in \autoref{sec:fixedbitset} for a verification of the
-\texttt{fixedbitset} crate.\todo{I have no idea where to put the complexity analysis}
+\texttt{fixedbitset} crate.
