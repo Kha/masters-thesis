@@ -1,14 +1,182 @@
 \section{Background}
-In this section, we give a basic introduction to our source and target
-languages. We will discuss finer semantic details where needed in
-\autoref{sec:trans} and \autoref{sec:mutref}.
+We start by giving a basic introduction to our source and target
+languages, focusing on the parts relevant to our work. We will discuss finer
+semantic details where needed in \autoref{sec:trans} and \autoref{sec:mutref}.
 
 \subsection{Rust}
 
 Rust~\cite{matsakis2014rust} is a modern, multi-paradigm systems programming language sponsored
-by Mozilla Research. Rust is still a quite young language, with its first stable
+by Mozilla Research and developed as an open-source community effort. Rust is still a quite young language, with its first stable
 version having been released on May 15, 2015. The two biggest Rust project as of
 this writing are the Servo\footnote{\url{https://github.com/servo/servo}}~\cite{anderson2016engineering} web browser engine and
 the Rust compiler \texttt{rustc}\footnote{\url{https://github.com/rust-lang/rust}} itself.
+
+As a partly functional language, Rust is primarily inspired by ML and shares much of
+its syntax, as evidenced in \autoref{fig:rustml}. However, the syntax also shows
+influences by C, the dominant systems programming language of the present.
+Finally, Rust also features a \emph{trait} system modeled after Haskell's type classes.
+
+\begin{figure}[bt]
+  \inputminted{rust}{code/rustml.rs}
+  
+  \caption{A first example of functional programming in Rust, showing algebraic
+    data types, polymorphic and higher-order functions, pattern matching, type
+    inference and the expression-oriented syntax}
+  \label{fig:rustml}
+\end{figure}
+
+Many features of Rust other than the syntax can be explained by Rust's desire to
+feature an ML-like abstraction level while still running as efficiently as C,
+even on resource-constrained systems that may not allow dynamic allocation at all.
+Most prominently, Rust uses manual memory management just like C and C++, but
+guarantees memory safety through its \emph{ownership} and
+\emph{borrowing} systems. Rust also features an \emph{unsafe} language subset that allows
+everything-goes programming on the level of C, but which is usually reserved for
+implementing low-level primitives on which the \emph{safe} part of the language can
+then build. In general, safe Rust is (thought to be) a type-safe
+language like ML and unlike either C or C++. We focus on safe Rust in the
+following and in our work in order to peruse these guarantees.
+
+Ownership describes the application of \emph{linear types} to memory management
+as proposed by Wadler~\cite{wadler1990linear}. The owner of a Rust object is the binding that is responsible for freeing the
+object's resources (by calling a method of the \texttt{Drop} trait), which
+generally happens at the end of the binding's scope.
+Because an object managing resources should only ever have one owner, types that implement
+\texttt{Drop} are linear types: A value may only be used once, at which point it is
+consumed and ownership is transferred to its new binding\footnote{Technically,
+  because leaking resources (\ie not consuming the object at all) is a safe operation in Rust, such types are merely
+  \emph{affine}. However, the distinction is not relevant for our purposes.
+}. In the following example, we extract an element from a \texttt{Vec} (a dynamically-sized array
+type that has to free heap space in its \texttt{Drop} implementation), after which we are not permitted to use the \texttt{Vec} again.
+
+\begin{minted}{rust}
+fn get<T>(v: Vec<T>, idx: usize) -> T {
+    v[idx]
+    // v will be freed here
+}
+
+let v: Vec<u32> = vec![1];
+let x = get(v, 0);
+// get(v, 1); // error[E0382]: use of moved value: `v`
+\end{minted}
+
+One way to retain access to the \texttt{Vec} would be to also return it from the
+function, regaining ownership. However, since \texttt{T} in general is an linear
+type too, \texttt{get} would have to remove the indexed element before returning
+the \texttt{Vec}.
+
+A much better alternative is to use \emph{references}, which provide standard
+pointer indirection. Because a reference does not take ownership of the pointee,
+creating it is also called \emph{borrowing}.
+
+\begin{minted}{rust}
+fn get<T>(v: &Vec<T>, idx: usize) -> &T {
+    &v[idx]
+}
+
+let v: Vec<u32> = vec![1];
+let x = get(&v, 0); // x: &u32
+\end{minted}
+
+Here \rust{&T} represents an immutable reference to a value of type \rust{T}. Note that the compiler would stop us if we tried to return \texttt{v[idx]} by value:
+
+\begin{verbatim}
+error[E0507]: cannot move out of indexed content
+\end{verbatim}
+
+Still, coming from other languages with manual memory management, this might
+look like a potentially unsafe thing to do: The function signature does not tell
+the callee that the returned reference is only valid as long as the
+\texttt{Vec}. Even Wadler tells us that a temporary reference to a linear value
+must be checked not to escape from the local scope. Indeed, it seems like the following program should produce a dangling pointer.
+
+\begin{minted}{rust}
+fn dangling() -> u32 {
+    let x = {
+        let v: Vec<u32> = vec![1];
+        get(&v, 0)
+        // v will be freed here
+    };
+    *x
+}
+\end{minted}
+
+However, the Rust compiler will stop us from doing this, printing an
+elaborate error message:
+
+\begin{verbatim}
+error: `v` does not live long enough
+|
+|         get(&v, 0)
+|              ^ does not live long enough
+|     };
+|     - borrowed value only lives until here
+|     *x
+| }
+| - borrowed value needs to live until here
+\end{verbatim}
+
+The compiler must have had some information about the relationship of \texttt{x}
+and \texttt{v} in order to deduce this without resorting to inter-procedural
+analysis. It turns out that the full signature of the \texttt{get} function is as follows:
+
+\begin{minted}{rust}
+fn get<'a, T>(v: &'a Vec<T>, idx: usize) -> &'a T
+\end{minted}
+
+\rust!'a! is called a \emph{formal lifetime parameter}. It
+specifies that the returned reference is indeed only valid as long as the first
+argument. By integrating lifetimes into the type system like this, Rust can
+reason about references even when confronted with complex, inter-procedural, higher-order reference lifetime relations.
+
+While we have solved the dangling pointer problem for immutable data, mutability
+as so often aggravates the problem.
+
+\begin{minted}{rust}
+fn dangling2() -> u32 {
+    let mut v: Vec<u32> = vec![1];
+    let x = get(&v, 0);
+    // remove all elements from v
+    v.clear(); // shorthand for (&mut v).clear();
+    *x
+    // v will be freed here
+}
+\end{minted}
+
+By clearing the vector while we still hold a reference to its content, we should
+again produce a dangling pointer -- even though this time, \rust{v} indeed
+outlives \rust{x}. Fortunately, the Rust compiler will again stop us:
+
+\begin{minted}{text}
+error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable
+|
+|     let x = get(&v, 0);
+|                  - immutable borrow occurs here
+|     // remove all elements from v
+|     v.clear(); // shorthand for (&mut v).clear();
+|     ^ mutable borrow occurs here
+|     *x
+| }
+| - immutable borrow ends here
+\end{minted}
+
+We have finally arrived at the aliasing problem: In a language with manual
+memory management, we can create type unsafety through the mere existence of two
+pointers, at least one of them mutable, to the same datum. Thus, Rust detects
+and forbids any occurrences of mutable aliasing, as shown above.
+
+%The beauty of Rust's solution to safe managed memory management is that the absence of mutable aliasing solves
+The beauty of forbidding mutable aliasing is that it solves many sources of bugs
+in imperative programs even outside of managed memory management. Indeed, as
+Wadler notes, it makes mutable references safe even in a referentially
+transparent language: ``In order for destructive updating of a value to be safe,
+it is essential that there be only one reference to the value when the update
+occurs''~\cite{wadler1990linear}. While Rust does introduce APIs such as for I/O that break referential
+transparency, the absence of mutable aliasing still provides safety guarantees
+that are usually only attributed to purely functional languages, first and
+foremost among them the elimination of data races. By focusing on a subset of
+Rust and its APIs that is truly referentially transparent, we obtain a
+sufficiently narrow gap between Rust and the purely functional language Lean
+that our transformation between them becomes feasible.
 
 \subsection{Lean}

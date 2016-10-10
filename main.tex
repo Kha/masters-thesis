@@ -5,6 +5,8 @@
 \usepackage[english]{babel}
 \usepackage{lmodern}
 \usepackage{tikz}
+\usepackage{fontspec}
+\setmonofont{Inconsolata}
 
 \usetikzlibrary{positioning,calc,arrows}
 
@@ -19,6 +21,10 @@
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
 \usepackage{todonotes, minted}
+\usemintedstyle[final]{bw}
+\newmintinline[rust]{rust}{}
+\setminted{breaklines=true}
+
 
 \clubpenalty = 10000
 \widowpenalty = 10000 \displaywidowpenalty = 10000
