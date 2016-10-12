@@ -104,7 +104,7 @@ fn dangling() -> u32 {
 However, the Rust compiler will stop us from doing this, printing an
 elaborate error message:
 
-\begin{verbatim}
+\begin{minted}{text}
 error: `v` does not live long enough
 |
 |         get(&v, 0)
@@ -114,7 +114,7 @@ error: `v` does not live long enough
 |     *x
 | }
 | - borrowed value needs to live until here
-\end{verbatim}
+\end{minted}
 
 The compiler must have had some information about the relationship of \texttt{x}
 and \texttt{v} in order to deduce this without resorting to inter-procedural
@@ -180,3 +180,184 @@ sufficiently narrow gap between Rust and the purely functional language Lean
 that our transformation between them becomes feasible.
 
 \subsection{Lean}
+
+The Lean~\cite{de2015lean} theorem prover is an open source, dependently typed,
+interactive theorem prover developed jointly at Microsoft Research and Carnegie
+Mellon University. The first official release of Lean was announced at CADE-25
+in August 2015, making it just a few months younger than Rust. As of this
+writing, development on Lean is focused on the next, unreleased version that
+will feature powerful automation written in Lean itself.
+
+Lean supports two different interpretations of Martin-Löf type theory:
+a purely constructive one based on Homotopy Type Theory, and one based on the
+Calculus of Inductive
+Constructions~\cite{coquand1988calculus,pfenning1989inductively} as championed
+by the Coq~\cite{barras1997coq} theorem prover, which supports both constructive
+and classical reasoning. We use the latter in our work.
+
+The primitive type in dependent type theory is the dependent function (or
+product) type $\Pi x : A, B$, where $x$ may occur in $B$; if it does not, we
+obtain the standard function type $A \rightarrow B$. Function abstraction and
+application extend naturally to dependent functions, as perhaps best described
+by their formal typing rules.
+
+\[
+  \inferrule
+    {\Gamma, x : A \vdash e : B}
+    {\Gamma \vdash (\lambda x : A, e) : \Pi x : A, B}
+  \hspace{4em}
+  \inferrule
+    {\Gamma \vdash f : \Pi x : A, B \\ \Gamma \vdash e : A}
+    {\Gamma \vdash f e : [e/x]B}
+\]
+
+The Calculus of Inductive Constructions extends basic dependent type theory with
+a type scheme for inductive types, which are described by a set of (possibly
+dependent) functions, their \emph{constructors}. \autoref{fig:ind} shows basic
+inductive definitions from the Lean standard library.
+
+\begin{figure}[btp]
+  \begin{minted}{lean}
+inductive empty : Type
+
+inductive unit : Type :=
+star : unit
+
+inductive prod (A B : Type) : Type :=
+mk : A → B → prod A B
+
+inductive sum (A B : Type) : Type :=
+| inl : A → sum A B
+| inr : B → sum A B
+
+-- the dependent sum type
+inductive sigma (A : Type) (B : A → Type) : Type :=
+mk : Π(x : A), B x → sigma A B
+
+inductive bool : Type :=
+| ff : bool
+| tt : bool
+
+inductive option (A : Type) : Type :=
+| none : option A
+| some : A → option A
+
+inductive nat : Type :=
+| zero : nat
+| succ : nat → nat
+  \end{minted}
+
+  \caption{The most basic inductive types as well as some basic types from
+    functional programming}
+  \label{fig:ind}
+\end{figure}
+
+As we can see in \autoref{fig:ind}, inductive types themselves are instances of
+a type, namely \lean!Type!. This turns out to be a slight simplification,
+however. More specifically, Lean has a whole hierarchy of indexed types
+or \emph{universes} \lean!Type.{i}!, with \lean!Type.{i} :
+Type.{i+1}!\footnote{The hierarchy is, however, not cumulative: It is not true
+  that \lean!Type.{i} : Type.{i+2}!.}. The universe hierarchy is needed to avoid
+the type theoretic equivalent of Russell's paradox. When we write just
+\lean!Type! for the type of an inductive definition like in \autoref{fig:ind},
+a correct universe level $i \ge 1$
+(possibly dependent on argument universe levels) will automatically be inferred.
+The reason for skipping \lean!Type.{0}! is that it has a special function that
+is suggested by its more common name, \lean!Prop!: It is the universe we normally
+declare types in that are to be interpreted as propositions.
+
+Under the Curry-Howard isomorphism, an objects of a type can be interpreted as
+a proof of a proposition. The reason Lean uses a separate universe for this
+interpretation is that \lean!Prop! is given a specific property that would not
+make sense for the other universes: By \emph{proof irrelevance}, any two
+objects of a type in \lean!Prop! are definitionally equal. In other words,
+proofs are irrelevant for computation. Finally, \lean!Prop! is also
+\emph{impredicative}: If \lean!B : Prop!, then also \lean!(Π x : A, B) : Prop!
+for any \lean!A!. This property ensures that predicates and universal
+quantifications are still propositions.
+The separation of inductive types and inductive propositions can lead to some duplication, which
+however turns out to be very useful in ensuring suggestive names and notations
+for each side (\autoref{tab:dataprop}).
+
+\begin{table}[bt]
+  \centering
+
+  \begin{tabular}{ll}
+    \toprule
+    \multicolumn{2}{c}{type name (notation)}\\
+    in \lean!Type! & in \lean!Prop! \\
+    \midrule
+    \lean!empty! & \lean!false! \\
+    \lean!unit!  & \lean!true!  \\
+    \lean!prod! (\lean!×!) & \lean!and! (\lean!∧!) \\
+    \lean!sum! (\lean!+!) & \lean!or! (\lean!∨!) \\
+    \lean!sigma! (\lean!Σ x : A, B!) & \lean!Exists! (\lean!∃ x : A, B!) \\
+    \lean!Π x : A, B! & \lean!∀ x : A, B! \\
+    \lean!A → B! & \lean!A → B! \\
+    \bottomrule
+  \end{tabular}
+
+  \caption{The basic Curry-Howard correspondence. The table lists types from
+    \autoref{fig:ind} and the corresponding types from the standard library
+    with the same constructors,
+    but declared in \lean!Prop!. We also show their notations as well as the
+    special universal quantifier notation for dependent functions into
+    \lean!Prop!. Nondependent functions and implications are not distinguished
+    by notation.}
+  \label{tab:dataprop}
+\end{table}
+
+On top of its interpretation of dependent type theory, Lean includes many
+notational amenities. On the type level, in addition to basic and inductive
+definitions, it features syntactic \lean!abbreviation!s as well as
+\lean!structure!s. The latter are single-constructor inductive types that
+automatically define projections to each of their constructor parameters (or
+\emph{fields}) and furthermore support inheriting fields from other structures.
+
+\begin{minted}{lean}
+structure point2 :=
+(x : ℕ)
+(y : ℕ)
+
+structure point3 extends point2 :=
+(z : ℕ)
+
+example : point2 := ⦃point2, x := 0, y := 1⦄
+check point3.x -- point3.x : point3 → ℕ
+\end{minted}
+
+In addition to the standard parameter syntax
+\lean!(x : A)!, Lean also supports two more binding modes, \lean!{x : A}!
+and \lean![x : A]!.
+%, with which \lean!x! will be inserted by automatic \emph{elaboration} instead
+%of explicit function application.
+In the first one, \lean!x! is an \emph{implicit} parameter
+and will be inferred from other parameters or the expected result type, such as
+in the constructor of the ubiquitous type \lean!eq! modeling Leibniz equality:
+
+\begin{minted}{lean}
+inductive eq {A : Type} (a : A) : A → Prop :=
+refl : eq a a -- explicit form: @eq A a a
+\end{minted}
+
+The binding mode \lean![x : A]! instructs Lean to infer \lean!x! by
+\emph{type class inference}. Type classes are arbitrary definitions annotated with the
+\lean![class]! attribute. Type class inference synthesizes instances of a class
+by a Prolog-like search through definitions of the class type marked with \lean![instance]!.
+
+\begin{minted}{lean}
+structure inhabited [class] (A : Type) : Type :=
+(value : A)
+
+definition default (A : Type) [inhabited A] : A :=
+inhabited.value A
+
+definition nat.is_inhabited [instance] : inhabited ℕ :=
+⦃inhabited, value := 0⦄
+definition prod.is_inhabited [instance] (A B : Type)
+  [inhabited A] [inhabited B] : inhabited (A × B) :=
+⦃inhabited, value := (default A, default B)⦄
+
+eval default (ℕ × ℕ) -- (0, 0)
+\end{minted}{lean}
+\todo{extend ad nauseam when needed}

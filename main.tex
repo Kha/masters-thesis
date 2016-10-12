@@ -6,25 +6,41 @@
 \usepackage{lmodern}
 \usepackage{tikz}
 \usepackage{fontspec}
-\setmonofont{Inconsolata}
+%\setmonofont{Inconsolata}
+\setmonofont[Scale=MatchLowercase]{Source Code Pro}
 
 \usetikzlibrary{positioning,calc,arrows}
 
 \usepackage{listings}
 
-\usepackage{amsmath}
+\usepackage{amsmath, mathpartir}
 \usepackage[labelformat=simple]{subfig}
 \usepackage[font={sf},margin=10pt,labelfont=bf]{caption}
 \usepackage{booktabs}
 \usepackage[colorlinks=false]{hyperref}
+
+\usepackage{newunicodechar}
+\newfontfamily{\freeserif}{DejaVu Sans}
+\newunicodechar{ℕ}{\freeserif{ℕ}}
+\newunicodechar{ₐ}{\freeserif{ₐ}}
+\newunicodechar{₁}{\freeserif{₁}}
+\newunicodechar{∈}{\freeserif{∈}}
+\newunicodechar{𝓞}{\ensuremath{\mathcal{O}}}
+\newunicodechar{∉}{\freeserif{∉}}
+%\newunicodechar{Π}{\freeserif{Π}}
+%\newunicodechar{→}{\freeserif{→}}
+\newunicodechar{⦃}{\freeserif{⦃}}
+\newunicodechar{⦄}{\freeserif{⦄}}
+\newunicodechar{∧}{\freeserif{∧}}
+\newunicodechar{∨}{\freeserif{∨}}
 
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
 \usepackage{todonotes, minted}
 \usemintedstyle[final]{bw}
 \newmintinline[rust]{rust}{}
-\setminted{breaklines=true}
-
+\newmintinline[lean]{lean}{}
+\setminted{breaklines=true, fontsize=\footnotesize}
 
 \clubpenalty = 10000
 \widowpenalty = 10000 \displaywidowpenalty = 10000
