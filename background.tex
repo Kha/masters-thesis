@@ -4,6 +4,7 @@ languages, focusing on the parts relevant to our work. We will discuss finer
 semantic details where needed in \autoref{sec:trans} and \autoref{sec:mutref}.
 
 \subsection{Rust}
+\label{sec:rust}
 
 Rust~\cite{matsakis2014rust} is a modern, multi-paradigm systems programming language sponsored
 by Mozilla Research and developed as an open-source community effort. Rust is still a quite young language, with its first stable
@@ -16,7 +17,7 @@ its syntax, as evidenced in \autoref{fig:rustml}. However, the syntax also shows
 influences by C, the dominant systems programming language of the present.
 Finally, Rust also features a \emph{trait} system modeled after Haskell's type classes.
 
-\begin{figure}[bt]
+\begin{figure}[!bp]
   \inputminted{rust}{code/rustml.rs}
   
   \caption{A first example of functional programming in Rust, showing algebraic
@@ -248,7 +249,7 @@ inductive nat : Type :=
   \end{minted}
 
   \caption{The most basic inductive types as well as some basic types from
-    functional programming}
+    functional programming in Lean}
   \label{fig:ind}
 \end{figure}
 
@@ -359,5 +360,5 @@ definition prod.is_inhabited [instance] (A B : Type)
 ⦃inhabited, value := (default A, default B)⦄
 
 eval default (ℕ × ℕ) -- (0, 0)
-\end{minted}{lean}
+\end{minted}
 \todo{extend ad nauseam when needed}

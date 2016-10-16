@@ -22,6 +22,12 @@ let get_mut (a : array (ref int)) (i : int) : ref int = a[i]
 let get_mut (a : array int) (i : int) : ref int = ref a[i]
 \end{minted}
 
+In contrast, Rust can provide a perfectly safe function with this functionality.
+
+\begin{minted}{rust}
+fn slice::get_mut<T>(slice: &mut [T], index: usize) -> Option<&mut T>
+\end{minted}
+
 WhyML is also being used as an intermediate language for the verification of
 programs in Ada~\cite{guitton2011hi}, C~\cite{cuoq2012frama} and Java~\cite{filliatre2007krakatoa}.
 For the latter two languages, aliasing is reintroduced by way of an explicit heap.
@@ -49,3 +55,13 @@ part of the trusted computing base. SeL4 is a notable exception in this,
 providing (at lower optimization levels) a direct equivalence proof~\cite{sewell2013translation} between the
 produced kernel binary and the verified embedded code, thus completely removing
 the original C code from the trusted computing base.
+
+While not an imperative language, the purely functional, total Cogent language~\cite{o2016refinement}
+uses linear types in the style of Wadler~\cite{wadler1990linear} to avoid
+automatic memory management, much like Rust. Building
+on AutoCorres, the language is designed both to be easily verifiable and to
+compile down to efficient C code. As we shall see in \autoref{sec:rust}, the
+biggest differences between Wadler-style purely functional linear languages and Rust are the
+existence of mutable references as well as sophisticated interprocedural
+reference tracking in the latter. For example, the aforementioned \rust{get_mut}
+function can only be expressed as a higher-order function in Cogent, even in the immutable case.
