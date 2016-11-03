@@ -7,7 +7,7 @@
 \usepackage{tikz}
 \usepackage{fontspec}
 %\setmonofont{Inconsolata}
-\setmonofont[Scale=MatchLowercase]{Source Code Pro}
+\setmonofont[Scale=0.85]{Source Code Pro}
 
 \usetikzlibrary{positioning,calc,arrows}
 
@@ -18,9 +18,10 @@
 \usepackage[font={sf},margin=10pt,labelfont=bf]{caption}
 \usepackage{booktabs}
 \usepackage[colorlinks=false]{hyperref}
+\providecommand*{\listingautorefname}{Listing}
 
 \usepackage{newunicodechar}
-\newfontfamily{\freeserif}{DejaVu Sans}
+\newfontfamily{\freeserif}[Scale=MatchLowercase]{DejaVu Sans}
 \newunicodechar{ℕ}{\freeserif{ℕ}}
 \newunicodechar{ₐ}{\freeserif{ₐ}}
 \newunicodechar{₁}{\freeserif{₁}}
@@ -37,10 +38,14 @@
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
 \usepackage{todonotes, minted}
+%workaround to remove red boxes
+\AtBeginEnvironment{minted}{\renewcommand{\fcolorbox}[4][]{#4}}
+\usemintedstyle{tango}
 \usemintedstyle[final]{bw}
 \newmintinline[rust]{rust}{}
 \newmintinline[lean]{lean}{}
-\setminted{breaklines=true, fontsize=\footnotesize}
+\setminted{breaklines=true, fontsize=\small\linespread{0.85}}
+\setmintedinline{fontsize=\normalsize}
 
 \clubpenalty = 10000
 \widowpenalty = 10000 \displaywidowpenalty = 10000
@@ -161,15 +166,15 @@
 \newpage
 
 \begin{abstract}
-  Imperative programming, and aliasing in particular, represents a major
-  obstacle in formally reasoning about everyday code. By utilizing restrictions
-  the imperative programming language Rust imposes on mutable aliasing, we
-  present a scheme for transforming a substantial part of the Rust language into the
-  purely functional language of the Lean theorem prover. We use this scheme to
-  verify the correctness of real-world examples of Rust code without the need
-  for special semantics or logics. We furthermore
-  show the extensibility of our transformation by incorporating an analysis of
-  asymptotic runtimes.
+Imperative programming, and aliasing in particular, represents a major
+obstacle in formally reasoning about everyday code. By utilizing restrictions
+the imperative programming language Rust imposes on mutable aliasing, we
+present a scheme for shallowly embedding a substantial part of the Rust language into the
+purely functional language of the Lean theorem prover. We use this scheme to
+verify the correctness of real-world examples of Rust code without the need
+for special semantics or logics. We furthermore
+show the extensibility of our transformation by incorporating an analysis of
+asymptotic runtimes.
 \end{abstract}
 \tableofcontents
 
@@ -189,6 +194,7 @@
 
 \input{trans}
 
+\newpage
 \section{Case Study: Verification of \texttt{std::[T]::binary\_search}}
 \label{sec:binary_search}
 

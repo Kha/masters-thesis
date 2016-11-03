@@ -57,9 +57,9 @@ produced kernel binary and the verified embedded code, thus completely removing
 the original C code from the trusted computing base.
 
 While not an imperative language, the purely functional, total Cogent language~\cite{o2016refinement}
-uses linear types in the style of Wadler~\cite{wadler1990linear} to avoid
-automatic memory management, much like Rust. Building
-on AutoCorres, the language is designed both to be easily verifiable and to
+uses linear types in the style of Wadler~\cite{wadler1990linear} for safe
+manual memory management, much like Rust. The language is designed both to be
+easily verifiable (by building on AutoCorres) and to
 compile down to efficient C code. As we shall see in \autoref{sec:rust}, the
 biggest differences between Wadler-style purely functional linear languages and Rust are the
 existence of mutable references as well as sophisticated interprocedural

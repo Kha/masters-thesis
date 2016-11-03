@@ -13,18 +13,18 @@ this writing are the Servo\footnote{\url{https://github.com/servo/servo}}~\cite{
 the Rust compiler \texttt{rustc}\footnote{\url{https://github.com/rust-lang/rust}} itself.
 
 As a partly functional language, Rust is primarily inspired by ML and shares much of
-its syntax, as evidenced in \autoref{fig:rustml}. However, the syntax also shows
+its syntax, as evidenced in \autoref{lst:rustml}. However, the syntax also shows
 influences by C, the dominant systems programming language of the present.
 Finally, Rust also features a \emph{trait} system modeled after Haskell's type classes.
 
-\begin{figure}[!bp]
+\begin{listing}[!bp]
   \inputminted{rust}{code/rustml.rs}
   
   \caption{A first example of functional programming in Rust, showing algebraic
     data types, polymorphic and higher-order functions, pattern matching, type
     inference and the expression-oriented syntax}
-  \label{fig:rustml}
-\end{figure}
+  \label{lst:rustml}
+\end{listing}
 
 Many features of Rust other than the syntax can be explained by Rust's desire to
 feature an ML-like abstraction level while still running as efficiently as C,
@@ -217,7 +217,7 @@ a type scheme for inductive types, which are described by a set of (possibly
 dependent) functions, their \emph{constructors}. \autoref{fig:ind} shows basic
 inductive definitions from the Lean standard library.
 
-\begin{figure}[btp]
+\begin{listing}[btp]
   \begin{minted}{lean}
 inductive empty : Type
 
@@ -250,10 +250,10 @@ inductive nat : Type :=
 
   \caption{The most basic inductive types as well as some basic types from
     functional programming in Lean}
-  \label{fig:ind}
-\end{figure}
+  \label{lst:ind}
+\end{listing}
 
-As we can see in \autoref{fig:ind}, inductive types themselves are instances of
+As we can see in \autoref{lst:ind}, inductive types themselves are instances of
 a type, namely \lean!Type!. This turns out to be a slight simplification,
 however. More specifically, Lean has a whole hierarchy of indexed types
 or \emph{universes} \lean!Type.{i}!, with \lean!Type.{i} :
@@ -299,7 +299,7 @@ for each side (\autoref{tab:dataprop}).
   \end{tabular}
 
   \caption{The basic Curry-Howard correspondence. The table lists types from
-    \autoref{fig:ind} and the corresponding types from the standard library
+    \autoref{lst:ind} and the corresponding types from the standard library
     with the same constructors,
     but declared in \lean!Prop!. We also show their notations as well as the
     special universal quantifier notation for dependent functions into
