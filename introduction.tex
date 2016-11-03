@@ -19,9 +19,8 @@ modern theorem provers.
 Alternatively, programs can be ``shallowly'' embedded by directly translating them
 into terms in the theorem prover's language without the use of an explicit inner semantics.
 This simplifies many semantic details such as the identification and
-substitution of bound variables, but is harder to accomplish the more the semantics
+substitution of bound variables, but it is harder to accomplish the more the semantics
 of the source language differs from the theorem prover's own semantics.
-\todo{verification condition generators? Move to Related Work?}
 
 Regardless of the type of embedding,
 an explicit heap that references can point into must generally be modeled and
@@ -38,20 +37,20 @@ mutable sharing such as iterator invalidation. It furthermore enables more
 aggressive optimizations.
 
 While the full Rust language also provides raw pointers, which are not bound by
-the aliasing restriction, and other ``unsafe'' operations, a (informal or formal)
-memory model for Rust has yet to be proposed. We therefore focus on the ``safe''
+the aliasing restriction, and other ``unsafe'' operations, a
+memory model for Rust (informal or formal) has yet to be proposed. We therefore focus on the ``safe''
 subset of Rust that has no unsolved semantic details.
 
 We utilize safe Rust's aliasing restriction to design a monadic shallow embedding of a
 substantial subset of Rust
-into the purely functional language of the Lean~\cite{de2015lean} theorem prover without the need
+into the purely functional language of the Lean~\cite{de2015lean} theorem prover, without the need
 for any heap-like indirection. This allows us to
 reason about unannotated, real-world Rust code in mostly the same manner one would
 reason about native Lean definitions. The monadic approach gives us further
 flexibility in modeling additional effects such as function runtime.
 
 We first discuss the simpler cases of the
-translation, notably excluding mutable references, in \autoref{sec:trans} and
+translation, notably excluding mutable references, in \autoref{sec:trans}. We
 show their application by giving a formal verification of Rust's
 \verb!std::[T]::binary_search! method in \autoref{sec:binary_search}.
 \autoref{sec:mutref} discusses the translation of most usages of mutable

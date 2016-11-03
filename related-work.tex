@@ -44,8 +44,10 @@ tool then transforms this representation into a shallow monadic embedding,
 dealing with the `uninteresting complexities of C'~\cite{greenaway2014don} on the
 way. The result is an abstracted representation that is quite similar to ours
 (and in fact inspired it in part, as we shall note below), but doesn't go the
-last mile of completely eliminating the heap where possible. Without explicit
-no-alias annotations, the semantics of C would allow that in far fewer places than those
+last mile of completely eliminating the heap where possible. Thus the user still
+has to worry and reason about (the absence of) aliasing manually or through a
+nested logic such as separation logic. Without explicit
+no-alias annotations, the semantics of C would allow eliminating the heap in far fewer places than those
 of Rust in any case.
 
 It should be noted that our work, like most verification projects based on
