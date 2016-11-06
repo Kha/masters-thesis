@@ -1,0 +1,490 @@
+\section{Basic Transformation}
+\label{sec:trans}
+
+In this section, we describe the basic translation from Rust to Lean that
+includes pure code as well as mutable local variables and loops, but not mutable
+references (see~\autoref{sec:mutref}). We roughly follow the structure of the
+Rust Reference\footnote{\url{https://doc.rust-lang.org/reference.html}}.
+
+\subsection{The MIR}
+
+\begin{figure}[!bp]
+  \centering
+  \begin{tikzpicture}
+    \node (1) [block] { source };
+    \node (2) [block,below=of 1] { AST };
+    \node (3) [block,below=of 2] { HIR };
+    \node (4) [block,below=of 3] { MIR };
+    \node (5) [block,below=of 4] { LLVM IR };
+    \node (6) [block,right=3cm of 4] { Lean };
+    \draw[->] (1) to (2);
+    \draw[->] (2) edge[loop left] node[align=right] {macro expansion\\name resolution} (2);
+    \draw[->] (2) to (3);
+    \draw[->] (3) edge[loop left] node[align=right] {lifetime resolution\\validity checks} (3);
+    \draw[->] (3) to (4);
+    \draw[->] (4) edge[loop left] node[align=right] {optimizations\\borrow checking} (4);
+    \draw[->] (4) to (5);
+    \draw[->] (4) to node {our work} (6);
+  \end{tikzpicture}
+  \caption{Overview of the Rust compiler pipeline and our work in that context}
+  \label{fig:mir}
+\end{figure}
+
+Because Rust makes extensive use of inference algorithms for types, lifetimes and typeclasses,
+correctly parsing Rust code is no small feat. Therefore, we use the Rust
+Compiler \texttt{rustc} itself as a frontend and work on the completely explicit and
+much simpler \emph{mid-level intermediate representation} (MIR)
+(\autoref{fig:mir}). By writing our translation program in Rust, we can import
+the \texttt{rustc} libraries to gain access to the MIR and many convenient
+helper functions.
+
+The MIR is a control flow graph (CFG) representation where a basic block consists
+of a list of statements followed by a terminator that (conditionally or
+unconditionally) transfers control to other basic blocks. For readability,
+this section will mostly argue on the Rust source level, but the graph structure
+will be important for translating control flow.
+
+%Apart from annotation statements and ones that will be inserted in the backend, the only statement kind we have to handle is the assignment of an rvalue to an lvalue. 
+
+\subsection{Programs and files}
+
+Rust's unit of compilation is called a \emph{crate}. A crate consists of one or
+more \texttt{.rs} files and can be compiled to an executable or library. Files
+inside a crate may freely reference declarations between them. On the other
+hand, Lean files may only import other files non-recursively and declarations
+must be strictly sorted in order of usage for termination checking. We therefore
+translate a crate into a single Lean file and perform a topological sort on its
+declarations. While Lean does support explicit declarations of mutually
+recursive types and functions, we have not yet encountered such declarations in
+Rust code as part of our formalization work and thus have not implemented support for them so far.
+
+In detail, our tool creates a file called \verb!generated.lean! in a separate
+folder for each crate and connects them using Lean's \lean{import} directive
+according to the inter-crate dependencies. The user can additionally create a
+\verb!pre.lean! file that will automatically be imported and can be used for
+axiomatizations as well as a \verb!config.toml! file that can influence the
+translation -- see below for examples. We use a third Lean file \verb!thy.lean! per crate
+for the proofs, which will import both the generated code and proof files from
+other crates.
+
+\subsection{Types}
+
+\subsubsection{Primitive Types}
+
+Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
+types, tuples, arrays, slices, and function types.
+
+Following AutoCorres's design, we map the primitive integer types to
+Lean's native arbitrary-sized types and instead handle overflow explicitly
+during computation (\autoref{sec:arith}).
+
+\begin{minted}{lean}
+abbreviation u8 [parsing_only] := nat
+abbreviation u16 [parsing_only] := nat
+abbreviation u32 [parsing_only] := nat
+abbreviation u64 [parsing_only] := nat
+abbreviation usize [parsing_only] := nat
+
+abbreviation i8 [parsing_only] := int
+// ...
+
+definition u8.bits [reducible] : ℕ := 8
+// ...
+
+definition usize.bits : ℕ := 16
+lemma usize.bits_ge_16 : usize.bits ≥ 16 := dec_trivial
+attribute usize.bits [irreducible]
+\end{minted}
+
+For the machine-size integer types \rust{usize} and \rust{isize}, we only expose
+the conservative assumption that their bit sizes are at least 16. We still define
+\rust{usize.bits} to be exactly 16 so that it is computable, but by then marking
+the definition as \rust{[irreducible]}, this fact is only accessible in proofs
+when explicitly unfolding the definition.
+When a proof does rely on the bounds of a parameter, we can add a separate
+hypothesis, for which we make use of typeclasses. The bounds of an expression
+can often be determined just from partial information, such as with unsigned division.
+
+\begin{minted}{lean}
+definition is_bounded_nat [class] (bits x : ℕ) := x < 2^bits
+abbreviation is_usize := is_bounded_nat usize.bits
+
+lemma div_is_bounded_nat [instance] (bits x y : ℕ)
+  [is_bounded_nat bits x] : is_bounded_nat bits (x / y) := ...
+\end{minted}
+
+We use the same approach for arrays (\rust{[T; N]}) and slices (\rust{&[T]}),
+mapping both the to arbitrary-length \lean{list} type. While Rust arrays have a
+constant length encoded in the type, slices are dynamic views into contiguous sequences
+like arrays or \rust{Vec}s and bounded only by the memory size. The latter fact is important
+when trying to prove that a \rust{usize} counter can reach all indices in a slice.
+
+\begin{minted}{lean}
+abbreviation array [parsing_only] (A : Type₁) (n : ℕ) := list A
+abbreviation slice [parsing_only] := list
+
+definition is_slice [class] {T : Type₁} (xs : slice T) :=
+length xs ≤ 2^usize.bits
+\end{minted}
+
+\subsubsection{Structs and enums}
+
+Because Rust does not feature inheritance, struct types and enumerated types are
+true Algebraic Data Types and can directly be translated to their Lean
+equivalents (\lean{structure} and \lean{inductive}, respectively).
+
+\subsubsection{References}
+
+An immutable reference \rust{&'a T} is checked by the Rust compiler not to alias
+with any mutable reference and thus can be safely replaced with the translation
+of \rust{T} itself. We drop all lifetime specifiers in general because we trust
+the Rust compiler to already have made the memory safety checks.
+
+We will discuss mutable references in \autoref{sec:mutref}.
+
+\subsection{The semantics monad}
+
+The core part for representing Rust's dynamic semantics is the monadic embedding. While
+higher-order unification issues in the current Lean version prevent us from
+outright parameterizing the embedding by an arbitrary monad instance, we still
+try to keep the interface of our specific monad abstract so that the monad can be
+extended in the future.
+
+We currently model abnormal termination\footnote{unspecified behavior like integer
+overflow and \emph{panics} from out-of-bounds array accesses or explicit \rust{panic!}
+calls. Rust does not have exceptions.} and
+nontermination as well as an abstract step counter for asymptotic run time analysis.
+
+\begin{minted}{lean}
+definition sem (A : Type₁) := option (A × ℕ)
+\end{minted}
+
+We provide the standard monadic operations on the type, including a
+\texttt{do}-notation. The model-specific operations are \lean{mzero}
+indicating abnormal termination/nontermination, and \lean{sem.incr}, which
+increments the step counter (if any). An increment of one is emitted around
+every Rust function call and before each loop iteration.
+
+\begin{minted}{lean}
+definition mzero {A : Type₁} : sem A := none
+definition return {A : Type₁} (x : A) : sem A := some (x, 0)
+
+definition sem.incr {A : Type₁} (n : ℕ) : sem A → sem A
+| (some (x, k)) := some (x, k+n)
+| none          := none
+
+definition sem.bind {A B : Type₁} (m : sem A) (f : A → sem B)
+  : sem B :=
+option.bind m (λs, match s with
+| (x, k) := sem.incr k (f x)
+end)
+
+infixl ` >>= `:2 := sem.bind
+\end{minted}
+
+The semantics monad follows the usual monad laws, which we will make use of in proofs.
+
+\begin{minted}{lean}
+lemma return_bind {A B : Type₁} {a : A} {f : A → sem B}
+  : (return a >>= f) = f a := ...
+lemma bind_return {A : Type₁} {m : sem A} : (m >>= return) = m := ...
+lemma bind.assoc {A B C : Type₁} {m : sem A} {f : A → sem B}
+  {g : B → sem C} : (m >>= f >>= g) = (m >>= (λx, f x >>= g)) := ...
+\end{minted}
+
+\subsection{Statements and control flow}
+
+The local state of a Rust function consists of its arguments, variables, and
+temporaries (variables introduced by the compiler). Without mutable references,
+these locals can only be manipulated by assignments, the single statement kind
+available in the MIR. In linear code, keeping track of assignments is as easy as
+transforming them to redeclarations.
+
+\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
+  \begin{minted}{rust}
+p.x += 1;
+  \end{minted}
+\end{minipage}
+\begin{minipage}{0.6\textwidth}
+  \begin{minted}{lean}
+let p = Point { x = p.x + 1, ..p };
+  \end{minted}
+\end{minipage}\vspace{1em}
+
+Nonlinear control flow is introduced by Rust's \rust{if} and \rust{match}
+constructs as well as its three loop constructs (which have a single common
+representation in the MIR). We map the first two cases to Lean's corresponding
+constructs of the same names.
+
+\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
+  \begin{minted}{rust}
+let x = if b {1} else {0};
+x & 1
+  \end{minted}
+\end{minipage}
+\begin{minipage}{0.33\textwidth}
+\begin{tikzpicture}
+  \node (1) [block] { \rust{if b} };
+  \node (2) [block,below=of 1,xshift=-9mm] { \rust{x = 0;} };
+  \draw[->] (1) to node[left] {\rust{false}} (2);
+  \node (3) [block,below=of 1,xshift=9mm] { \rust{x = 1;} };
+  \draw[->] (1) to node[right] {\rust{true}} (3);
+  \node (4) [block,below=of 2,xshift=9mm] { \rust{ret = x & 1; return} };
+  \draw[->] (2) to (4);
+  \draw[->] (3) to (4);
+\end{tikzpicture}
+\end{minipage}
+\begin{minipage}{0.3\textwidth}
+  \begin{minted}{lean}
+if b = bool.tt then
+  let x := 1 in
+  x & 1
+else
+  let x := 0 in
+  x & 1
+  \end{minted}
+\end{minipage}\vspace{1em}
+
+As can be seen, we currently translate each branch of a conditional block
+terminator independently, which can lead to code duplication if those branches
+converge again. While this has not manifested any problems in our verification
+work so far, we may want to mitigate it in the future by factoring out the
+common translated code into a separate definition.
+
+\begin{figure}[!b]
+\hspace{1cm}\begin{minipage}{0.4\textwidth}
+  \begin{minted}{rust}
+fn f() {
+  let mut x = 0;
+  while x < 10 {
+      x += 1;
+  }
+}
+  \end{minted}
+\end{minipage}
+\begin{minipage}{0.4\textwidth}
+  \newsavebox{\mintedbox}
+  \begin{lrbox}{\mintedbox}
+    \begin{minipage}{1.8cm}
+\begin{minted}{rust}
+x = 0;
+if x < 10
+\end{minted}
+    \end{minipage}
+  \end{lrbox}
+\begin{tikzpicture}
+  \node (start) {};
+  \node (1) [block,label=left:1,below=5mm of start] {\usebox{\mintedbox}};
+  \draw[->] (start) to (1);
+  \node (2) [block,label=left:2,below=of 1,xshift=-15mm] { \rust{return} };
+  \draw[->] (1) to node[left] {\rust{false}} (2);
+  \node (3) [block,label=left:3,below=of 1,xshift=15mm] { \rust{x = x + 1;} };
+  \draw[->] (1) to node[right] {\rust{true}} (3);
+  \draw[->] (3) to[bend left=45] (1);
+\end{tikzpicture}
+\end{minipage}
+
+\caption{A \rust{while} loop and the corresponding (simplified) MIR graph.
+  Blocks 1 and 3 from a strongly connected component, which is dominated by
+  block 1, the loop header.}
+\label{fig:scc}
+
+\end{figure}
+
+We do need to factor out common code in the case of loops. There is no special
+terminator signifying loops in the MIR; instead, we have to search for
+(nontrivial) strongly connected components (SCCs) of basic blocks (\autoref{fig:scc}). Because Rust's
+control flow is \emph{reducible} (notably, lacking a \emph{goto} instruction),
+we may assume that such an SCC can only be entered from a single node
+(\emph{dominating} the SCC). With this, we can describe the semantics of the SCC
+in more traditional terms of iteration: The dominating node is the \emph{loop
+  header}, while the rest of the SCC is the \emph{body}. Jumping back to the
+header signifies a new iteration, while jumping out of the SCC means breaking
+the loop. By breaking up the SCC at the header, we can thus translate a single
+iteration to a function of type
+
+\begin{minted}{lean}
+State → sem (State + Res)
+\end{minted}
+
+\noindent{}that takes a tuple \lean{State} of loop variables and either returns the new
+state for the next iteration, or a value of the source function's return type
+\lean{Res} when breaking out of the loop. We tie this into a single value of
+type \lean{sem Res} by use of a general \emph{loop combinator}.
+
+\subsubsection{The loop combinator}
+
+The loop combinator has the signature
+
+\begin{minted}{lean}
+noncomputable definition loop {State Res : Type₁}
+  (body : State → sem (State + Res)) (s : State) : sem Res
+\end{minted}
+Its task is to apply \rust{body} repeatedly (starting with \rust{s}) until some
+\rust{Res} is returned; if the loop does not terminate, it returns \rust{mzero}
+(which \rust{body} may also return by itself). Termination for arbitrary values
+of \rust{body} obviously is not a decidable property. Therefore we will have to leave
+the constructive subset of Lean, as signified by the \lean{noncomputable}
+specifier. The (simplified) translation of the Rust code in \autoref{fig:scc} via
+\lean{loop} is as follows:
+
+\begin{minted}{lean}
+definition f.loop_1 (x : i32) : sem (i32 + unit) :=
+if x < 10 then
+  let x := x + 1 in
+  return (sum.inl x)
+else
+  return (sum.inr unit.star)
+
+definition f : sem unit :=
+let x := 0 in
+loop f.loop_1 x
+\end{minted}
+
+As a total, purely functional language, Lean cannot express iteration directly,
+and the only primitive kind of recursion available in Lean is structural recursion
+over an inductive datatype. On top of structural recursion, the Lean standard
+library defines the more general concept of \emph{well-founded} recursion: A
+relation \lean{R : A → A → Prop} on a type \lean{A} is well-founded if every
+element of \lean{A} is \emph{accessible} through the relation, which is defined
+inductively as all predecessors of the element under the relation being accessible.
+
+\begin{minted}{lean}
+inductive acc {A : Type} (R : A → A → Prop) : A → Prop :=
+intro : ∀x, (∀ y, R y x → acc R y) → acc R x
+
+inductive well_founded [class] {A : Type} (R : A → A → Prop) : Prop :=
+intro : (∀ a, acc R a) → well_founded R
+\end{minted}
+
+Using structural recursion over the \lean{acc} predicate, the standard library
+defines a fixed-point combinator for functionals respecting a well-founded
+relation, and proves that the combinator satisfies the fixpoint equation.
+
+\begin{minted}{lean}
+namespace well_founded
+section
+  variables {A : Type} {C : A → Type} {R : A → A → Prop}
+
+  definition fix [well_founded R] (F : Πx, (Πy, R y x → C y) → C x)
+    (x : A) : C x := ...
+
+  theorem fix_eq [well_founded R] (F : Πx, (Πy, R y x → C y) → C x)
+    (x : A) : fix F x = F x (λy h, fix F y) := ...
+end
+end well_founded
+\end{minted}
+
+We use well-founded recursion to define \lean{loop}: If repeatedly applying
+\emph{body} to \emph{s} yields a sequence of states,
+this sequence will terminate iff there exists a well-founded relation on
+\lean{State} such that the sequence is a descending chain.
+This is true because descending chains in well-founded relations are finite, and
+conversely a finite sequence $s_1 = s, \dots, s_n$ is a descending chain in the
+trivial well-founded relation $R = \{(s_{i+1}, s_i) | 1 \le i < n\}$.
+
+In the formalization, given a well-founded relation \lean{R} on \lean{State}, we first have to take care of lifting it to a well-founded relation \lean{R'} on \lean{State + Res}.
+
+\begin{minted}{lean}
+section
+  parameters {State Res : Type₁}
+  parameter (body : State → sem (State + Res))
+  parameter (R : State → State → Prop)
+
+  definition State' := State + Res
+
+  definition R' : State' → State' → Prop
+  | (inl s') (inl s) := R s' s
+  | _        _       := false
+
+  private lemma R'.wf [instance] [well_founded R] : well_founded R' := ...
+\end{minted}
+
+We can then wrap \lean{body} in a functional respecting \lean{R'} that we can pass to \lean{well_founded.fix}.
+
+\begin{minted}{lean}
+  definition F (x : State') (f : Π (x' : State'), R' x' x → sem State') : sem State' :=
+  match x with
+  | inr _ := mzero -- unreachable
+  | inl s :=
+    do x' ← sem.incr 1 (body s);
+    match x' with
+    | inr r := return (inr r)
+    | x'    := if H : R' x' x then f x' H else mzero
+    end
+  end
+
+  definition loop.fix [well_founded R] (s : State) : sem Res :=
+  do x ← well_founded.fix F (inl s);
+  match x with
+  | inr r := return r
+  | inl _ := mzero -- unreachable
+  end
+\end{minted}
+
+Finally, we implement \lean{loop} by choosing any well-founded relation \lean{R} that makes
+the loop terminate, if any, or else return \lean{mzero}.
+
+\begin{minted}{lean}
+  definition terminating (s : State) :=
+  ∃ Hwf : well_founded R, loop.fix s ≠ mzero
+
+  noncomputable definition loop (s : State) : sem Res :=
+  if Hex : ∃ R, terminating R s then
+    @loop.fix (classical.some Hex) _ (classical.some (classical.some_spec Hex)) s
+  else mzero
+\end{minted}
+
+Here we make use of the \emph{dependent if-then-else} notation that allows us to
+test for a property and then bind a name to a proof of it in case it holds. We
+then destructure that proof object to obtain the relation and its
+well-foundedness proof so that we can pass them to \lean{loop.fix}. The
+\lean{classical.some} and \lean{classical.some_spec} definitions are based on
+Hilbert's epsilon operator.
+
+\begin{minted}{lean}
+noncomputable definition classical.some {A : Type} {P : A → Prop} (H : ∃x, P x) : A := ...
+theorem classical.some_spec {A : Type} {P : A → Prop} (H : ∃x, P x) : P (some H) := ...
+\end{minted}
+
+The use of \lean{classical.some} as well as the undecidable conditional
+\lean{∃ R, terminating R s} make \lean{loop} non-computable.
+
+When verifying loops, we will first verify the corresponding application of
+\lean{loop.fix} using a specific well-founded relation, for which we can prove a
+convenient fixpoint equation.
+
+\begin{minted}{lean}
+  theorem loop.fix_eq
+    {R : State → State → Prop} [well_founded R] {s : State} :
+    loop.fix R s =
+      do x' ← sem.incr 1 (body s);
+      match x' with
+      | inl s' := if R s' s then loop.fix R s' else mzero
+      | inr r  := return r
+      end := ...
+\end{minted}
+
+If the application of \lean{loop.fix} terminates, we can show that the original
+application \lean{loop} will do so too with the same return value,
+via a helper lemma that says that all terminating \lean{loop.fix} applications are equal.
+
+\begin{minted}{lean}
+  lemma loop.fix_eq_fix
+    {R₁ R₂ : State → State → Prop} [well_founded R₁] [well_founded R₂]
+    {s : State}
+    (Hterm₁ : loop.fix R₁ s ≠ mzero)
+    (Hterm₂ : loop.fix R₂ s ≠ mzero) :
+    loop.fix R₁ s = loop.fix R₂ s := ...
+
+  theorem loop.fix_eq_loop
+    {R : State → State → Prop} [well_founded R]
+    {s : State}
+    (Hterm : loop.fix R s ≠ mzero) :
+    loop.fix R s = loop s := ...
+\end{minted}
+
+\subsection{Expressions}
+
+\subsubsection{Arithmetic expressions}
+\label{sec:arith}

@@ -361,4 +361,21 @@ definition prod.is_inhabited [instance] (A B : Type)
 
 eval default (ℕ × ℕ) -- (0, 0)
 \end{minted}
+
+In order to keep definition signatures short, we will also make use of Lean's
+\lean{section} mechanism that allows us to fix common parameters for a set of definitions.
+
+\begin{minted}{lean}
+section
+  -- in this section, implicit in signatures and in use sites
+  parameter (A : Type)
+  -- implicit in signatures but explicit in use sites
+  variable (x : A)
+  
+  definition f : A := x
+  check f -- f : A → A
+end
+
+check f -- f : Π A : Type, A → A
+\end{minted}
 \todo{extend ad nauseam when needed}
