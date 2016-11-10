@@ -3,8 +3,11 @@
 
 In this section, we describe the basic translation from Rust to Lean that
 includes pure code as well as mutable local variables and loops, but not mutable
-references (see~\autoref{sec:mutref}). We roughly follow the structure of the
-Rust Reference\footnote{\url{https://doc.rust-lang.org/reference.html}}.
+references (see~\autoref{sec:mutref}). We focus on the parts that are unique to
+Rust or are nontrivial to translate. We roughly follow the structure of the
+Rust Reference\footnote{\url{https://doc.rust-lang.org/reference.html}}. Because
+our translation output is not optimized for readability, all sample translations
+in this section have been prettified manually without changing their semantics.
 
 \subsection{The MIR}
 
@@ -45,6 +48,20 @@ this section will mostly argue on the Rust source level, but the graph structure
 will be important for translating control flow.
 
 %Apart from annotation statements and ones that will be inserted in the backend, the only statement kind we have to handle is the assignment of an rvalue to an lvalue. 
+
+\subsection{Identifiers}
+
+Working on top of the MIR, we do not have to worry about the lexical structure
+of Rust. We do, however, have to make sure we emit lexically correct Lean code.
+This is only a problem with identifiers, which we would like to transfer with
+minimal changes. Both languages are based on segmented identifiers, just with
+different separators (\rust{a::b::c} in Rust versus \lean{a.b.c} in Lean).
+However, some identifier parts in Rust such as \rust{[T]} or \rust{<F<T> as S>}
+are not valid in Lean. To retain readability, we have therefore extended Lean
+with a general escaping syntax for identifiers that allows arbitrary symbols by
+surrounding them with \lean{«} and \lean{»}: The identifier \lean{«[T]».«a.b»}
+is now a valid Lean identifier consisting of the parts \lean{«[T]»} and
+\lean{«a.b»}.
 
 \subsection{Programs and files}
 
@@ -141,6 +158,215 @@ of \rust{T} itself. We drop all lifetime specifiers in general because we trust
 the Rust compiler to already have made the memory safety checks.
 
 We will discuss mutable references in \autoref{sec:mutref}.
+
+\subsection{Traits}
+
+Rust's trait system is similar to Haskell's type classes, but borrows some
+syntax from more object-oriented \emph{interface} systems. In particular, in addition
+to functions a trait may also contain methods that can be called on any object
+of a type the trait is implemented \emph{on}. This is implemented via an implicit
+type parameter \rust{Self} that is used for the type of the \lean{self}
+parameter and is specified at a special syntactic position in trait
+implementations and trait bounds.
+
+\begin{figure}[bt]
+\begin{minipage}{0.36\textwidth}
+  \begin{minted}{rust}
+struct S { i: i32 }
+
+trait Trait<T> {
+  fn f(self) -> T;
+}
+
+impl Trait<i32> for S {
+  fn f(self) -> i32 {
+    self.i
+  }
+}
+
+fn g<T : Trait<i32>>
+  (t: T) -> i32 {
+  t.f()
+}
+
+fn h() -> i32 {
+  g(S { i: 0 })
+}
+  \end{minted}
+\end{minipage}
+\begin{minipage}{0.64\textwidth}
+  \begin{minted}{lean}
+structure S := (i : i32)
+
+structure Trait [class] (Self T : Type₁) :=
+(f : Self → sem T)
+
+definition «S as Trait<i32>».f (self : S) : sem i32 :=
+return (S.i self)
+
+definition «S as Trait<i32>» [instance] :=
+⦃Trait S i32, f := «S as Trait<i32>».f⦄
+
+definition g {T : Type₁} [Trait T i32] (t : T) : sem i32 :=
+sem.incr 1 (Trait.f _ t)
+
+definition h : sem i32 :=
+sem.incr 1 (g (S.mk 0))
+  \end{minted}
+\end{minipage}\vspace{1em}
+
+\caption{A parametric trait in Rust and its translation.}
+\label{fig:trait}
+\end{figure}
+
+The translation of basic traits into Lean type classes is straightforward
+(\autoref{fig:trait}). We will discuss the details of the function-level translation and the \lean{sem}
+monad below. While \rust{impl} blocks in Rust are anonymous, we need to name all
+definitions in Lean and do so using a naming scheme similar to \texttt{rustc}'s
+own internal representation.
+
+\subsubsection{Default methods}
+
+As shown in \autoref{fig:trait}, we generate separate definitions for functions in trait
+implementations before assembling them into a type class instance. This way, and
+by eliminating the type class indirection in calls to a statically known
+implementation, we can allow trait implementation functions to call each other
+using our standard topological dependency ordering.
+
+\vspace{1em}\noindent\begin{minipage}{0.36\textwidth}
+  \begin{minted}{rust}
+struct S;
+
+trait Trait {
+  fn f(self);
+  fn g(self);
+}
+
+impl Trait for S {
+  fn f(self) {
+    self.g()
+  }
+  fn g(self) {}
+}
+  \end{minted}
+\end{minipage}
+\begin{minipage}{0.64\textwidth}
+  \begin{minted}{lean}
+structure S := (i : i32)
+
+structure Trait [class] (Self : Type₁) :=
+(f : Self → sem unit)
+(g : Self → sem unit)
+
+definition «S as Trait».g (self : S) : sem unit :=
+return unit.star
+
+definition «S as Trait».f (self : S) : sem unit :=
+sem.incr 1 («S as Trait».g self)
+
+definition «S as Trait» [instance] :=
+⦃Trait S, f := «S as Trait».f, g := «S as Trait».g⦄
+  \end{minted}
+\end{minipage}\vspace{1em}
+
+However, just like Haskell, Rust also allows default implementations of trait
+methods that may arbitrarily call and be called from other trait methods that
+will only be defined in some implementation of the trait later on. This
+makes static ordering of dependencies impossible.
+
+In essence, a default method in a trait takes as input an instance of that trait
+to call other trait methods with, but at the same time has to be a slot in the
+very same trait because it may be overridden in an implementation.
+
+We could try to dynamically solve this cyclic dependency in a general way, computing its least fixed point
+by use of the Knaster-Tarski theorem~\cite{tarski1955lattice} as usual in
+denotational semantics. Or we can restrict ourselves to special cases that break
+the cycle. If we remove the trait instance as an input to the default method, it
+cannot call other trait methods. If, on the other hand, we do not make default
+methods part of the trait instance, it
+cannot be overridden or be called from inside implementations of the trait.
+
+We could implement all three approaches and automatically or manually choose
+between them on a case-by-case basis. It turns out, however, that in the Rust standard library, default methods are often just
+convenience wrappers around other trait methods, like in the \rust{PartialEq} trait.
+
+\begin{minted}{rust}
+pub trait PartialEq<Rhs> {
+  fn eq(&self, other: &Rhs) -> bool;
+  fn ne(&self, other: &Rhs) -> bool { !self.eq(other) }
+}
+\end{minted}
+
+Therefore, as of now we have only implemented the third approach of declaring
+default methods outside of their trait, which turned out to be sufficient for
+our verification work so far.
+
+\begin{minted}{lean}
+structure PartialEq [class] (Self Rhs : Type₁) :=
+(eq : Self → Rhs → sem bool)
+
+definition PartialEq.ne {Self Rhs : Type₁} [PartialEq Self Rhs] (self : Self) (other : Rhs) : sem bool :=
+do t5 ← sem.incr 1 (PartialEq.eq self other);
+return (bool.bnot t5)
+\end{minted}
+
+\subsubsection{Associated types}
+
+There is one further advanced trait feature Rust shares with Haskell called
+\emph{associated types}: trait members that are not functions, but types.
+
+\begin{minted}{rust}
+pub trait Add<RHS> {
+  type Output;
+  fn add(self, rhs: RHS) -> Output;
+}
+\end{minted}
+
+Making \rust{Output} an associated type instead of a type parameter
+fundamentally changes type class inference: Instead of being an input parameter
+to the inference like \rust{Self} and \rust{RHS}, \rust{Output} is
+\emph{determined} by the inferred trait instance. This means that inference on
+\rust{add} can succeed even if the expected return type is unknown.
+
+As a dependently typed language, Lean has no problem with representing such
+traits as type classes. What it cannot represent, however, is a special class
+of trait bounds Rust supports: \rust{T : Add<RHS, Output=RHS>} asserts a
+definitional equality on the associated type; but definitional equality exists
+only as a judgment in Lean, not as a proposition we could pass as a parameter.
+Instead, we follow the
+original paper~\cite{chakravarty2005associated} on associated types in Haskell
+that translates type classes with associated types into System F by turning them
+into type parameters.
+
+\begin{minted}{lean}
+structure Add [class] (Self RHS Output : Type₁) :=
+(add : Self → RHS → sem Output)
+\end{minted}
+
+This transformation does weaken type class inference, which means that in the
+generated Lean code, we have to resort to passing type class
+arguments explicitly using the \lean{@} notation. We might be able to regain
+inference in a potential future version of Lean that supports functional dependencies~\cite{jones2000type}.
+
+\subsubsection{Trait Objects}
+
+Lastly, Rust's trait system exhibits a feature that does not directly exist in
+Haskell. In Haskell, type classes are not types - they cannot explicitly be passed by
+value, only implicitly through inference. In Rust, traits are dynamically sized
+types, which means they can be used as values, but only behind some indirection like
+\rust{&Trait}. These \emph{trait objects} are represented as a pointer to a
+vtable of the trait implementation and another pointer to the \emph{Self} value.
+
+This ``fat pointer'' representation would translate quite naturally to an existential type
+\lean{Σ (Self : Type), (Trait Self × Self)}. What is not apparent in this
+natural definition, however, is the fact that it necessarily lives in a higher universe
+than \lean{Self}. This is the only construct currently in Rust that can give rise to a type
+not in \lean{Type₁} (but, in fact, to a type in an arbitrarily high universe through
+nesting). It is an open problem in the Lean community if and how a monad over
+types of different universes can cleanly work given Lean's non-cumulative
+universe hierarchy. Fortunately, trait objects are a rare feature in Rust code
+that we do not expect to find on the algorithmical level of our current
+verification work, so we have not investigated this issue any further for now.
 
 \subsection{The semantics monad}
 
