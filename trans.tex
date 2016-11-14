@@ -87,6 +87,7 @@ other crates.
 \subsection{Types}
 
 \subsubsection{Primitive Types}
+\label{sec:prim}
 
 Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
 types, tuples, arrays, slices, and function types.
@@ -532,8 +533,7 @@ iteration to a function of type
 \begin{minted}{lean}
 State → sem (State + Res)
 \end{minted}
-
-\noindent{}that takes a tuple \lean{State} of loop variables and either returns the new
+that takes a tuple \lean{State} of loop variables and either returns the new
 state for the next iteration, or a value of the source function's return type
 \lean{Res} when breaking out of the loop. We tie this into a single value of
 type \lean{sem Res} by use of a general \emph{loop combinator}.
@@ -712,5 +712,149 @@ via a helper lemma that says that all terminating \lean{loop.fix} applications a
 
 \subsection{Expressions}
 
-\subsubsection{Arithmetic expressions}
+\subsubsection{Arithmetic operators}
 \label{sec:arith}
+
+Rust's arithmetic semantics is based on the premise that in most circumstances,
+arithmetic overflow is unintended by the programmer~\footnote{When overflowing
+  is indeed intended, the programmer may use special methods such as
+  \rust{u8::wrapping_add}}, and constitutes a bug in
+the program. Therefore, in debug builds, the built-in arithmetic operators will
+panic on any overflow. In release builds, overflows for both signed and unsigned
+types will wrap for performance reasons.
+
+We thus regard arithmetic overflow in those operators as \emph{unspecified} and
+return the bottom value in such cases, using the predicate
+\lean{is_bounded_nat} from \autoref{sec:prim}.
+
+\begin{minted}{lean}
+definition sem.guard {a : Type₁} (p : Prop) [decidable p] (s : sem a) : sem a :=
+if p then s else mzero
+
+definition check_unsigned (bits : ℕ) (x : nat) : sem nat :=
+sem.guard (is_bounded_nat bits x) (return x)
+
+definition checked.add (bits : ℕ) (x y : nat) : sem nat :=
+check_unsigned bits (x+y)
+
+...
+\end{minted}
+
+We can avoid the check in operations that cannot overflow, such as unsigned
+division. We still have to check for division by zero, of course.
+
+\begin{minted}{lean}
+definition checked.div (bits : ℕ) (x y : nat) : sem nat :=
+sem.guard (y ≠ 0) (return (div x y))
+\end{minted}
+
+The signed implementations are equivalent, except that we do have to check for
+overflow during signed division.
+
+\subsubsection{Bitwise operators}
+
+We implement all bitwise operations on integral types by converting them to and
+from the \lean{bitvec} type, which we adapted from the Lean standard
+library and expanded significantly.
+
+\begin{minted}{lean}
+abbreviation binary_bitwise_op (bits : ℕ) (op : bitvec bits → bitvec bits → bitvec bits)
+  (a b : nat) : nat :=
+bitvec.to ℕ (op (bitvec.of bits a) (bitvec.of bits b))
+
+definition bitor bits := binary_bitwise_op bits bitvec.or
+...
+\end{minted}
+
+Some care must be taken when implementing bitwise shift: Shifting by the bitsize
+of a type or more bits will panic in Rust.
+
+\begin{minted}{lean}
+definition checked.shl [reducible] (bits : ℕ) (x : nat) (y : u32) : sem nat :=
+sem.guard (y < bits)
+  (return (bitvec.to ℕ (bitvec.shl (bitvec.of bits x) y)))
+\end{minted}
+
+\subsubsection{Lambda expressions}
+
+Each lambda expression in Rust has a unique type that represents its
+\emph{closure}, the set of variables captured from the outer scope.
+As necessitated by its ownership and mutability tracking, Rust files each
+closure type into one of three traits that together form a hierarchy:
+
+\begin{minted}{rust}
+pub trait FnOnce<Args> {
+  type Output;
+  fn call_once(self, args: Args) -> Output;
+}
+
+pub trait FnMut<Args> : FnOnce<Args> {
+  fn call_mut(&mut self, args: Args) -> Output;
+}
+
+pub trait Fn<Args> : FnMut<Args> {
+  fn call(&self, args: Args) -> Output;
+}
+\end{minted}
+
+Rust will automatically infer the most general trait based on the lambda
+expression's requirements: If it has to move ownership of a captured variable, it
+can only implement \rust{FnOnce}; if it needs a mutable reference to a variable,
+it can only implement \rust{FnMut}; otherwise, it will implement \rust{Fn}.
+
+Because we lose the restrictions of linear typing during our translation, we can
+simplify the hierarchy: \rust{FnOnce} can be implemented using
+\rust{FnMut}, if implemented, which in turn can be implemented using
+\rust{Fn} (because the closure must be immutable in that case).
+
+\begin{minted}{lean}
+structure FnOnce [class] (Self Args Output : Type₁) :=
+(call_once : Self → Args → sem Output)
+
+structure FnMut [class] (Self Args Output : Type₁) :=
+(call_mut : Self → Args → sem (Output × Self))
+
+definition FnMut_to_FnOnce [instance] (Self Args Output : Type₁)
+  [FnMut Self Args Output] : FnOnce Self Args Output :=
+⦃FnOnce, call_once := λ self args, do x ← FnMut.call_mut _ self args;
+   return x.1⦄
+
+structure Fn [class] (Self : Type₁) (Args : Type₁) (Output : Type₁) :=
+(call : Self → Args → sem Output)
+
+definition Fn_to_FnMut [instance] (Self Args Output : Type₁) [Fn Self Args Output]
+  : FnMut Self Args Output :=
+⦃FnMut, call_mut := λ self args, do x ← Fn.call _ self args;
+  return (x, self)⦄
+\end{minted}
+
+Translating a lambda expression means declaring a closure type according to the
+captured environment and creating a trait implementation according to the
+closure kind as reported by the compiler. Calling a lambda expression, on the
+other hand, is no different from other trait method calls and does not need any
+special casing.
+
+\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
+  \begin{minted}{rust}
+fn f(x: i32) -> i32 {
+  let l = |y| x + y;
+  l(x)
+}
+\end{minted}
+\end{minipage}
+\begin{minipage}{0.6\textwidth}
+\begin{minted}{lean}
+structure f.closure_7 := (val : i32)
+
+definition f.closure_7.fn (c : f.closure_7) (y : i32) : sem i32 :=
+let t4 := f.closure_7.val c in
+checked.sadd i32.bits t4 y
+
+definition f.closure_7.inst [instance] : Fn f.closure_7 i32 i32 :=
+⦃Fn, call := f.closure_7.fn⦄
+
+definition f (x : i32) : sem i32 :=
+let l := f.closure_7.mk x in
+sem.incr 1 (Fn.call _ l x)
+\end{minted}
+\end{minipage}

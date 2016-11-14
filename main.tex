@@ -9,7 +9,7 @@
 %\setmonofont{Inconsolata}
 \setmonofont[Scale=0.85]{Source Code Pro}
 
-\usetikzlibrary{positioning,calc,arrows}
+\usetikzlibrary{shapes.geometric,positioning,calc,arrows}
 
 \usepackage{listings}
 
@@ -37,7 +37,7 @@
 
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
-\usepackage{todonotes, minted}
+\usepackage{todonotes, rotating, minted}
 %workaround to remove red boxes
 \renewcommand{\fcolorbox}[4][]{#4}
 \usemintedstyle{tango}
@@ -194,10 +194,8 @@ asymptotic runtimes.
 \newpage
 
 \input{trans}
-
 \newpage
-\section{Case Study: Verification of \texttt{std::[T]::binary\_search}}
-\label{sec:binary_search}
+\input{binary-search}
 
 \section{Transformation of Mutable References}
 \label{sec:mutref}
