@@ -1,11 +1,11 @@
-\section{Basic Transformation}
+\section{The Basic Transformation}
 \label{sec:trans}
 
 In this section, we describe the basic translation from Rust to Lean that
 includes pure code as well as mutable local variables and loops, but not mutable
 references (see~\autoref{sec:mutref}). We focus on the parts that are unique to
 Rust or are nontrivial to translate. We roughly follow the structure of the
-Rust Reference\footnote{\url{https://doc.rust-lang.org/reference.html}}. Because
+Rust Reference.\footnote{\url{https://doc.rust-lang.org/reference.html}} Because
 our translation output is not optimized for readability, all sample translations
 in this section have been prettified manually without changing their semantics.
 
@@ -63,7 +63,7 @@ surrounding them with \lean{«} and \lean{»}: The identifier \lean{«[T]».«a.
 is now a valid Lean identifier consisting of the parts \lean{«[T]»} and
 \lean{«a.b»}.
 
-\subsection{Programs and files}
+\subsection{Programs and Files}
 
 Rust's unit of compilation is called a \emph{crate}. A crate consists of one or
 more \texttt{.rs} files and can be compiled to an executable or library. Files
@@ -80,7 +80,7 @@ folder for each crate and connects them using Lean's \lean{import} directive
 according to the inter-crate dependencies. The user can additionally create a
 \verb!pre.lean! file that will automatically be imported and can be used for
 axiomatizations as well as a \verb!config.toml! file that can influence the
-translation -- see below for examples. We use a third Lean file \verb!thy.lean! per crate
+translation (see below for examples). We use a third Lean file \verb!thy.lean! per crate
 for the proofs, which will import both the generated code and proof files from
 other crates.
 
@@ -92,7 +92,7 @@ other crates.
 Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
 types, tuples, arrays, slices, and function types.
 
-Following AutoCorres's design, we map the primitive integer types to
+Following AutoCorres's design (see \autoref{sec:background}), we map the primitive integer types to
 Lean's native arbitrary-sized types and instead handle overflow explicitly
 during computation (\autoref{sec:arith}).
 
@@ -134,18 +134,20 @@ lemma div_is_bounded_nat [instance] (bits x y : ℕ)
 We use the same approach for arrays (\rust{[T; N]}) and slices (\rust{&[T]}),
 mapping both the to arbitrary-length \lean{list} type. While Rust arrays have a
 constant length encoded in the type, slices are dynamic views into contiguous sequences
-like arrays or \rust{Vec}s and bounded only by the memory size. The latter fact is important
-when trying to prove that a \rust{usize} counter can reach all indices in a slice.
+like arrays or \rust{Vec}s and bounded only by the memory size. More
+specifically, they (and any Rust type) are assumed to be no larger than
+\rust{isize::MAX} bytes so that the pointer difference of any two elements can
+be represented by an \rust{isize} value.
 
 \begin{minted}{lean}
 abbreviation array [parsing_only] (A : Type₁) (n : ℕ) := list A
 abbreviation slice [parsing_only] := list
 
-definition is_slice [class] {T : Type₁} (xs : slice T) :=
-length xs ≤ 2^usize.bits
+definition is_slice [class] {A : Type₁} (xs : slice A) :=
+length xs < 2^(usize.bits-1)
 \end{minted}
 
-\subsubsection{Structs and enums}
+\subsubsection{Structs and Enums}
 
 Because Rust does not feature inheritance, struct types and enumerated types are
 true Algebraic Data Types and can directly be translated to their Lean
@@ -156,7 +158,7 @@ equivalents (\lean{structure} and \lean{inductive}, respectively).
 An immutable reference \rust{&'a T} is checked by the Rust compiler not to alias
 with any mutable reference and thus can be safely replaced with the translation
 of \rust{T} itself. We drop all lifetime specifiers in general because we trust
-the Rust compiler to already have made the memory safety checks.
+the Rust compiler to already have made all memory safety checks.
 
 We will discuss mutable references in \autoref{sec:mutref}.
 
@@ -226,7 +228,7 @@ monad below. While \rust{impl} blocks in Rust are anonymous, we need to name all
 definitions in Lean and do so using a naming scheme similar to \texttt{rustc}'s
 own internal representation.
 
-\subsubsection{Default methods}
+\subsubsection{Default Methods}
 
 As shown in \autoref{fig:trait}, we generate separate definitions for functions in trait
 implementations before assembling them into a type class instance. This way, and
@@ -311,7 +313,7 @@ do t5 ← sem.incr 1 (PartialEq.eq self other);
 return (bool.bnot t5)
 \end{minted}
 
-\subsubsection{Associated types}
+\subsubsection{Associated Types}
 
 There is one further advanced trait feature Rust shares with Haskell called
 \emph{associated types}: trait members that are not functions, but types.
@@ -369,7 +371,7 @@ universe hierarchy. Fortunately, trait objects are a rare feature in Rust code
 that we do not expect to find on the algorithmical level of our current
 verification work, so we have not investigated this issue any further for now.
 
-\subsection{The semantics monad}
+\subsection{The Semantics Monad}
 
 The core part for representing Rust's dynamic semantics is the monadic embedding. While
 higher-order unification issues in the current Lean version prevent us from
@@ -419,7 +421,7 @@ lemma bind.assoc {A B C : Type₁} {m : sem A} {f : A → sem B}
   {g : B → sem C} : (m >>= f >>= g) = (m >>= (λx, f x >>= g)) := ...
 \end{minted}
 
-\subsection{Statements and control flow}
+\subsection{Statements and Control Flow}
 
 The local state of a Rust function consists of its arguments, variables, and
 temporaries (variables introduced by the compiler). Without mutable references,
@@ -538,7 +540,7 @@ state for the next iteration, or a value of the source function's return type
 \lean{Res} when breaking out of the loop. We tie this into a single value of
 type \lean{sem Res} by use of a general \emph{loop combinator}.
 
-\subsubsection{The loop combinator}
+\subsubsection{The Loop Combinator}
 
 The loop combinator has the signature
 
@@ -712,13 +714,13 @@ via a helper lemma that says that all terminating \lean{loop.fix} applications a
 
 \subsection{Expressions}
 
-\subsubsection{Arithmetic operators}
+\subsubsection{Arithmetic Operators}
 \label{sec:arith}
 
 Rust's arithmetic semantics is based on the premise that in most circumstances,
-arithmetic overflow is unintended by the programmer~\footnote{When overflowing
+arithmetic overflow is unintended by the programmer,\footnote{When overflowing
   is indeed intended, the programmer may use special methods such as
-  \rust{u8::wrapping_add}}, and constitutes a bug in
+  \rust{u8::wrapping_add}} and constitutes a bug in
 the program. Therefore, in debug builds, the built-in arithmetic operators will
 panic on any overflow. In release builds, overflows for both signed and unsigned
 types will wrap for performance reasons.
@@ -751,7 +753,7 @@ sem.guard (y ≠ 0) (return (div x y))
 The signed implementations are equivalent, except that we do have to check for
 overflow during signed division.
 
-\subsubsection{Bitwise operators}
+\subsubsection{Bitwise Operators}
 
 We implement all bitwise operations on integral types by converting them to and
 from the \lean{bitvec} type, which we adapted from the Lean standard
@@ -775,7 +777,21 @@ sem.guard (y < bits)
   (return (bitvec.to ℕ (bitvec.shl (bitvec.of bits x) y)))
 \end{minted}
 
-\subsubsection{Lambda expressions}
+\subsubsection{Index Expressions}
+
+While indexing is desugared to a call to the \rust{Index} trait for most types,
+it is a primitive operation on arrays. Out-of-bounds accesses will panic in
+Rust. By identifying arrays with Lean lists, we can use the existing
+\lean{list.nth} function and \emph{lifting} its result into the semantics monad.
+
+\begin{minted}{lean}
+definition sem.lift_opt [unfold 2] {A : Type₁} : option A → sem A
+| none   := mzero
+| some a := return 
+\end{minted}
+
+\subsubsection{Lambda Expressions}
+\label{sec:lambda}
 
 Each lambda expression in Rust has a unique type that represents its
 \emph{closure}, the set of variables captured from the outer scope.

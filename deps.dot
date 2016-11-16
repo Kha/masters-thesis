@@ -1,0 +1,65 @@
+digraph {
+    graph [ratio=0.3];
+    node [fontname="Source Code Pro"];
+    0 [label="<[T] as slice::SliceExt>::binary_search"]
+    1 [label="<[T] as slice::SliceExt>::binary_search::{{closure}}"]
+    2 [label="cmp::Ordering",shape=diamond]
+    3 [label="<[T] as slice::SliceExt>::binary_search_by"]
+    4 [label="cmp::Ord",shape=box]
+    5 [label="result::Result",shape=diamond]
+    6 [label="cmp::Eq",shape=box]
+    7 [label="cmp::PartialOrd",shape=box]
+    8 [label="cmp::PartialEq",shape=box]
+    9 [label="option::Option",shape=diamond]
+    10 [label="<[T] as slice::SliceExt>::len",style=dashed]
+    11 [label="<[T] as slice::SliceExt>::split_at"]
+    12 [label="<[T] as slice::SliceExt>",shape=trapezium]
+    13 [label="slice::SliceExt::is_empty"]
+    15 [label="ops::FnMut",shape=box,style=dashed]
+    18 [label="ops::RangeFrom",shape=diamond]
+    19 [label="slice::<[T] as ops::Index<ops::RangeFrom<usize>>>::index"]
+    23 [label="slice::SliceExt",shape=box]
+    25 [label="ops::RangeTo",shape=diamond]
+    26 [label="slice::<[T] as ops::Index<ops::RangeTo<usize>>>::index"]
+    27 [label="ops::Range",shape=diamond]
+    28 [label="slice::<[T] as ops::Index<ops::Range<usize>>>::index",style=dashed]
+    0 -> 1
+    0 -> 2
+    0 -> 3
+    0 -> 4
+    0 -> 5
+    4 -> 6
+    4 -> 7
+    4 -> 2
+    6 -> 8
+    7 -> 8
+    7 -> 9
+    7 -> 2
+    3-> 10 
+    3-> 11 
+    3-> 12
+    3-> 13 
+    3-> 15 
+    3-> 18 
+    3-> 19 
+    3-> 5 
+    3-> 2 
+    13-> 23 
+    12-> 23 
+    12-> 10 
+    11-> 25 
+    11-> 26 
+    11-> 18 
+    11-> 19 
+    26-> 25 
+    26-> 27 
+    26-> 28 
+    19-> 18 
+    19-> 27 
+    19-> 10 
+    19-> 28 
+    1-> 4 
+    1-> 28 
+    1-> 15 
+    1-> 2 
+}

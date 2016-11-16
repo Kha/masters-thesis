@@ -44,10 +44,10 @@ object's resources (by calling a method of the \texttt{Drop} trait), which
 generally happens at the end of the binding's scope.
 Because an object managing resources should only ever have one owner, types that implement
 \texttt{Drop} are linear types: A value may only be used once, at which point it is
-consumed and ownership is transferred to its new binding\footnote{Technically,
+consumed and ownership is transferred to its new binding.\footnote{Technically,
   because leaking resources (\ie not consuming the object at all) is a safe operation in Rust, such types are merely
   \emph{affine}. However, the distinction is not relevant for our purposes.
-}. In the following example, we extract an element from a \texttt{Vec} (a dynamically-sized array
+} In the following example, we extract an element from a \texttt{Vec} (a dynamically-sized array
 type that has to free heap space in its \texttt{Drop} implementation), after which we are not permitted to use the \texttt{Vec} again.
 
 \begin{minted}{rust}
@@ -257,8 +257,8 @@ As we can see in \autoref{lst:ind}, inductive types themselves are instances of
 a type, namely \lean!Type!. This turns out to be a slight simplification,
 however. More specifically, Lean has a whole hierarchy of indexed types
 or \emph{universes} \lean!Type.{i}!, with \lean!Type.{i} :
-Type.{i+1}!\footnote{The hierarchy is, however, not cumulative: It is not true
-  that \lean!Type.{i} : Type.{i+2}!.}. The universe hierarchy is needed to avoid
+Type.{i+1}!.\footnote{The hierarchy is, however, not cumulative: It is not true
+  that \lean!Type.{i} : Type.{i+2}!.} The universe hierarchy is needed to avoid
 the type theoretic equivalent of Russell's paradox. When we write just
 \lean!Type! for the type of an inductive definition like in \autoref{lst:ind},
 a correct universe level $i \ge 1$
