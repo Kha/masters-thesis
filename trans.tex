@@ -541,6 +541,7 @@ state for the next iteration, or a value of the source function's return type
 type \lean{sem Res} by use of a general \emph{loop combinator}.
 
 \subsubsection{The Loop Combinator}
+\label{sec:loop}
 
 The loop combinator has the signature
 
@@ -683,14 +684,14 @@ When verifying loops, we will first verify the corresponding application of
 convenient fixpoint equation.
 
 \begin{minted}{lean}
-  theorem loop.fix_eq
-    {R : State → State → Prop} [well_founded R] {s : State} :
-    loop.fix R s =
-      do x' ← sem.incr 1 (body s);
-      match x' with
-      | inl s' := if R s' s then loop.fix R s' else mzero
-      | inr r  := return r
-      end := ...
+theorem loop.fix_eq
+  {R : State → State → Prop} [well_founded R] {s : State} :
+  loop.fix R s =
+    do x' ← sem.incr 1 (body s);
+    match x' with
+    | inl s' := if R s' s then loop.fix R s' else mzero
+    | inr r  := return r
+    end := ...
 \end{minted}
 
 If the application of \lean{loop.fix} terminates, we can show that the original
@@ -698,18 +699,18 @@ application \lean{loop} will do so too with the same return value,
 via a helper lemma that says that all terminating \lean{loop.fix} applications are equal.
 
 \begin{minted}{lean}
-  lemma loop.fix_eq_fix
-    {R₁ R₂ : State → State → Prop} [well_founded R₁] [well_founded R₂]
-    {s : State}
-    (Hterm₁ : loop.fix R₁ s ≠ mzero)
-    (Hterm₂ : loop.fix R₂ s ≠ mzero) :
-    loop.fix R₁ s = loop.fix R₂ s := ...
+lemma loop.fix_eq_fix
+  {R₁ R₂ : State → State → Prop} [well_founded R₁] [well_founded R₂]
+  {s : State}
+  (Hterm₁ : loop.fix R₁ s ≠ mzero)
+  (Hterm₂ : loop.fix R₂ s ≠ mzero) :
+  loop.fix R₁ s = loop.fix R₂ s := ...
 
-  theorem loop.fix_eq_loop
-    {R : State → State → Prop} [well_founded R]
-    {s : State}
-    (Hterm : loop.fix R s ≠ mzero) :
-    loop.fix R s = loop s := ...
+theorem loop.fix_eq_loop
+  {R : State → State → Prop} [well_founded R]
+  {s : State}
+  (Hterm : loop.fix R s ≠ mzero) :
+  loop.fix R s = loop s := ...
 \end{minted}
 
 \subsection{Expressions}
@@ -751,7 +752,7 @@ sem.guard (y ≠ 0) (return (div x y))
 \end{minted}
 
 The signed implementations are equivalent, except that we do have to check for
-overflow during signed division.
+overflow during signed division by $-1$.
 
 \subsubsection{Bitwise Operators}
 
@@ -785,7 +786,7 @@ Rust. By identifying arrays with Lean lists, we can use the existing
 \lean{list.nth} function and \emph{lifting} its result into the semantics monad.
 
 \begin{minted}{lean}
-definition sem.lift_opt [unfold 2] {A : Type₁} : option A → sem A
+definition sem.lift_opt {A : Type₁} : option A → sem A
 | none   := mzero
 | some a := return 
 \end{minted}
