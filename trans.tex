@@ -93,7 +93,7 @@ other crates.
 Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
 types, tuples, arrays, slices, and function types.
 
-Following AutoCorres's design (see \autoref{sec:related}), we map the primitive integer types to
+Following AutoCorres' design (see \autoref{sec:related}), we map the primitive integer types to
 Lean's native arbitrary-sized types and instead handle overflow explicitly
 during computation (\autoref{sec:arith}).
 
@@ -171,8 +171,7 @@ syntax from more object-oriented \emph{interface} systems. In particular, in add
 to functions a trait may also contain methods that can be called on any object
 of a type the trait is implemented \emph{on}. This is implemented via an implicit
 type parameter \rust{Self} that is used for the type of the \lean{self}
-parameter and is specified at a special syntactic position in trait
-implementations and trait bounds.
+parameter and is specified in the \rust{for} clause when implementing a trait via an \rust{impl} block.
 
 \begin{figure}[bt]
 \begin{sbs1}
@@ -275,15 +274,19 @@ In essence, a default method in a trait takes as input an instance of that trait
 to call other trait methods with, but at the same time has to be a slot in the
 very same trait because it may be overridden in an implementation.
 
-We could try to dynamically solve this cyclic dependency in a general way, computing its least fixed point
+There are multiple potential ways to deal with that depdendency cycle. We could
+simply create a specialized copy of the trait method for each instantiation, but
+then we would also have to copy proofs about it. We could try to dynamically solve the cycle in a general way, computing its least fixed point
 by use of the Knaster-Tarski theorem~\cite{tarski1955lattice} as usual in
 denotational semantics. Or we can restrict ourselves to special cases that break
 the cycle. If we remove the trait instance as an input to the default method, it
 cannot call other trait methods. If, on the other hand, we do not make default
 methods part of the trait instance, it
-cannot be overridden or be called from inside implementations of the trait.
+cannot be overridden or be called from inside implementations of the trait. We
+could even mix these two approaches, incrementally building up the
+trait instance by alternating between default and non-default methods.
 
-We could implement all three approaches and automatically or manually choose
+We could implement all these approaches and automatically or manually choose
 between them on a case-by-case basis. It turns out, however, that in the Rust standard library, default methods are often just
 convenience wrappers around other trait methods, like in the \rust{PartialEq} trait.
 

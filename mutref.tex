@@ -72,8 +72,8 @@ generate them at translation time.
 \begin{minted}{lean}
 definition lens.index (Inner : Type₁) (index : ℕ) : lens (slice Inner) Inner :=
 ⦃lens,
-  get := λ self, sem.lift_opt (list.nth self index),
-  set := λ self, sem.lift_opt ∘ list.update self index⦄
+  get := λ o, sem.lift_opt (list.nth self o),
+  set := λ o i, sem.lift_opt (list.update o index i)⦄
 \end{minted}
 
 There is one projection we have to special case: dereferencing an lvalue as in

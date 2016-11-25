@@ -37,6 +37,8 @@
 \newunicodechar{⊢}{\freeserif{⊢}}
 \newunicodechar{⊑}{\freeserif{⊑}}
 \newunicodechar{ₚ}{\freeserif{ₚ}}
+\newunicodechar{∘}{\freeserif{∘}}
+\newunicodechar{ₗ}{\freeserif{ₗ}}
 
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
@@ -48,7 +50,7 @@
 \usemintedstyle[final]{bw}
 \newmintinline[rust]{rust}{}
 \newmintinline[lean]{lean}{}
-\setminted{breaklines=true, fontsize=\small\linespread{0.85}}
+\setminted{breaklines=true, fontsize=\footnotesize\linespread{0.85}}
 \setmintedinline{fontsize=\normalsize}
 
 \clubpenalty = 10000
@@ -68,7 +70,7 @@
   \hfill\vline\hfill%
   \minipage[t]{0.62\textwidth}%
   \minted{lean}}{%
-  \endminted\endminipage}
+  \endminted\endminipage\vspace{1em}}
 
 \newcommand\ie{i.e.\ }
 \newcommand\eg{e.g.\ }
@@ -212,9 +214,8 @@ asymptotic runtimes.
 \newpage
 \input{mutref}
 \newpage
-\section{Case Study: Partial Verification of \texttt{fixedbitset}}
-\label{sec:fixedbitset}
-
+\input{fixedbitset}
+\newpage
 \section{Conclusion and Future Work}
 
 \newpage
