@@ -10,6 +10,7 @@ our translation output is not optimized for readability, all sample translations
 in this section have been prettified manually without changing their semantics.
 
 \subsection{The MIR}
+\label{sec:mir}
 
 \begin{figure}[!bp]
   \centering
@@ -92,7 +93,7 @@ other crates.
 Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
 types, tuples, arrays, slices, and function types.
 
-Following AutoCorres's design (see \autoref{sec:background}), we map the primitive integer types to
+Following AutoCorres's design (see \autoref{sec:related}), we map the primitive integer types to
 Lean's native arbitrary-sized types and instead handle overflow explicitly
 during computation (\autoref{sec:arith}).
 
@@ -154,6 +155,7 @@ true Algebraic Data Types and can directly be translated to their Lean
 equivalents (\lean{structure} and \lean{inductive}, respectively).
 
 \subsubsection{References}
+\label{sec:refs}
 
 An immutable reference \rust{&'a T} is checked by the Rust compiler not to alias
 with any mutable reference and thus can be safely replaced with the translation
@@ -173,8 +175,7 @@ parameter and is specified at a special syntactic position in trait
 implementations and trait bounds.
 
 \begin{figure}[bt]
-\begin{minipage}{0.36\textwidth}
-  \begin{minted}{rust}
+\begin{sbs1}
 struct S { i: i32 }
 
 trait Trait<T> {
@@ -195,10 +196,8 @@ fn g<T : Trait<i32>>
 fn h() -> i32 {
   g(S { i: 0 })
 }
-  \end{minted}
-\end{minipage}
-\begin{minipage}{0.64\textwidth}
-  \begin{minted}{lean}
+\end{sbs1}
+\begin{sbs2}
 structure S := (i : i32)
 
 structure Trait [class] (Self T : Type₁) :=
@@ -215,8 +214,7 @@ sem.incr 1 (Trait.f _ t)
 
 definition h : sem i32 :=
 sem.incr 1 (g (S.mk 0))
-  \end{minted}
-\end{minipage}\vspace{1em}
+\end{sbs2}
 
 \caption{A parametric trait in Rust and its translation.}
 \label{fig:trait}
@@ -236,8 +234,7 @@ by eliminating the type class indirection in calls to a statically known
 implementation, we can allow trait implementation functions to call each other
 using our standard topological dependency ordering.
 
-\vspace{1em}\noindent\begin{minipage}{0.36\textwidth}
-  \begin{minted}{rust}
+\begin{sbs1}
 struct S;
 
 trait Trait {
@@ -251,10 +248,8 @@ impl Trait for S {
   }
   fn g(self) {}
 }
-  \end{minted}
-\end{minipage}
-\begin{minipage}{0.64\textwidth}
-  \begin{minted}{lean}
+\end{sbs1}
+\begin{sbs2}
 structure S := (i : i32)
 
 structure Trait [class] (Self : Type₁) :=
@@ -269,8 +264,7 @@ sem.incr 1 («S as Trait».g self)
 
 definition «S as Trait» [instance] :=
 ⦃Trait S, f := «S as Trait».f, g := «S as Trait».g⦄
-  \end{minted}
-\end{minipage}\vspace{1em}
+\end{sbs2}
 
 However, just like Haskell, Rust also allows default implementations of trait
 methods that may arbitrarily call and be called from other trait methods that
@@ -429,29 +423,25 @@ these locals can only be manipulated by assignments, the single statement kind
 available in the MIR. In linear code, keeping track of assignments is as easy as
 transforming them to redeclarations.
 
-\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
-  \begin{minted}{rust}
+\begin{sbs1}
 p.x += 1;
-  \end{minted}
-\end{minipage}
-\begin{minipage}{0.6\textwidth}
-  \begin{minted}{lean}
+\end{sbs1}
+\begin{sbs2}
 let p = Point { x = p.x + 1, ..p };
-  \end{minted}
-\end{minipage}\vspace{1em}
+\end{sbs2}
 
 Nonlinear control flow is introduced by Rust's \rust{if} and \rust{match}
 constructs as well as its three loop constructs (which have a single common
 representation in the MIR). We map the first two cases to Lean's corresponding
 constructs of the same names.
 
-\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
+\vspace{1em}\noindent\begin{minipage}[t]{0.3\textwidth}
   \begin{minted}{rust}
 let x = if b {1} else {0};
 x & 1
   \end{minted}
 \end{minipage}
-\begin{minipage}{0.33\textwidth}
+\hfill\vline\hfill\begin{adjustbox}{valign=t,minipage={0.33\textwidth}}
 \begin{tikzpicture}
   \node (1) [block] { \rust{if b} };
   \node (2) [block,below=of 1,xshift=-9mm] { \rust{x = 0;} };
@@ -462,8 +452,8 @@ x & 1
   \draw[->] (2) to (4);
   \draw[->] (3) to (4);
 \end{tikzpicture}
-\end{minipage}
-\begin{minipage}{0.3\textwidth}
+\end{adjustbox}
+\hfill\vline\hfill\begin{minipage}[t]{0.3\textwidth}
   \begin{minted}{lean}
 if b = bool.tt then
   let x := 1 in
@@ -481,7 +471,7 @@ work so far, we may want to mitigate it in the future by factoring out the
 common translated code into a separate definition.
 
 \begin{figure}[!b]
-\hspace{1cm}\begin{minipage}{0.4\textwidth}
+\hspace{1cm}\begin{minipage}[t]{0.4\textwidth}
   \begin{minted}{rust}
 fn f() {
   let mut x = 0;
@@ -491,10 +481,10 @@ fn f() {
 }
   \end{minted}
 \end{minipage}
-\begin{minipage}{0.4\textwidth}
+\hfill\vline\hfill\begin{adjustbox}{valign=t,minipage={0.4\textwidth}}
   \newsavebox{\mintedbox}
   \begin{lrbox}{\mintedbox}
-    \begin{minipage}{1.8cm}
+    \begin{minipage}[t]{1.8cm}
 \begin{minted}{rust}
 x = 0;
 if x < 10
@@ -511,7 +501,7 @@ if x < 10
   \draw[->] (1) to node[right] {\rust{true}} (3);
   \draw[->] (3) to[bend left=45] (1);
 \end{tikzpicture}
-\end{minipage}
+\end{adjustbox}
 
 \caption{A \rust{while} loop and the corresponding (simplified) MIR graph.
   Blocks 1 and 3 from a strongly connected component, which is dominated by
@@ -851,16 +841,13 @@ closure kind as reported by the compiler. Calling a lambda expression, on the
 other hand, is no different from other trait method calls and does not need any
 special casing.
 
-\vspace{1em}\noindent\begin{minipage}{0.4\textwidth}
-  \begin{minted}{rust}
+\begin{sbs1}
 fn f(x: i32) -> i32 {
   let l = |y| x + y;
   l(x)
 }
-\end{minted}
-\end{minipage}
-\begin{minipage}{0.6\textwidth}
-\begin{minted}{lean}
+\end{sbs1}
+\begin{sbs2}
 structure f.closure_7 := (val : i32)
 
 definition f.closure_7.fn (c : f.closure_7) (y : i32) : sem i32 :=
@@ -873,5 +860,4 @@ definition f.closure_7.inst [instance] : Fn f.closure_7 i32 i32 :=
 definition f (x : i32) : sem i32 :=
 let l := f.closure_7.mk x in
 sem.incr 1 (Fn.call _ l x)
-\end{minted}
-\end{minipage}
+\end{sbs2}

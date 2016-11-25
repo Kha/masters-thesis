@@ -1,0 +1,221 @@
+\section{Transformation of Mutable References}
+\label{sec:mutref}
+
+The basic transformation already allows us to reason about mutability in
+form of local variables, including inside loops. The next step is to support
+non-local or indirect mutability in form of mutable references. We will develop
+a restricted but extendable transformation of mutable references in this chapter
+and put it to use in the next chapter.
+
+\subsection{Lenses as Functional References}
+
+In order to correctly translate mutable references, we will take a more careful
+look at their structure in the MIR \autoref{sec:mir}. Mutable references are
+created by the \rust{&mut x} syntax, which in MIR operates on \emph{lvalues}.
+
+\begin{minted}{rust}
+pub enum Rvalue<'tcx> {
+  /// &x or &mut x
+  Ref(&'tcx Region, BorrowKind, Lvalue<'tcx>),
+  ...
+}
+\end{minted}
+
+An lvalue in Rust is either a local or static (global) variable, or inductively some
+projection of another lvalue.
+
+\begin{minted}{rust}
+pub enum Lvalue<'tcx> {
+    Local(Local),
+    Static(DefId),
+    /// projection out of an lvalue (access a field, deref a pointer, etc)
+    Projection(Box<LvalueProjection<'tcx>>),
+}
+\end{minted}
+
+Because mutable static variables are not allowed in safe Rust, we may assume
+that every lvalue is rooted in a local variable. We can describe a mutable
+reference as \emph{focusing} on some part of a local variable, which in
+functional programming can represented by
+\emph{lenses}~\cite{foster2005combinators} (also known as \emph{functional
+  references}). For our purposes, a very simple presentation of lenses that
+allows us to get and set the focused part is sufficient. We also specialize it
+to return our semantics monad.
+
+\begin{minted}{lean}
+structure lens (Outer Inner : Type₁) :=
+(get : Outer → sem Inner)
+(set : Outer → Inner → sem Outer)
+
+definition lens.id {Inner : Type₁} : lens Inner Inner :=
+⦃lens, get := return, set := λ o, return⦄
+
+definition lens.comp {A B C : Type₁} (l₂ : lens B C) (l₁ : lens A B) : lens A C :=
+⦃lens, get := λ o,
+  do o' ← lens.get l₁ o;
+  lens.get l₂ o',
+ set := λ o i,
+  do o' ← lens.get l₁ o;
+  do o' ← lens.set l₂ o' i;
+  lens.set l₁ o o'⦄
+
+infixr ` ∘ₗ `:60 := lens.comp
+\end{minted}
+
+With this, we can translate the \rust{&mut x} operation: We generate a lens per
+projection, then compose them together to obtain a value of type \lean{lens A B}
+where \lean{B} is the type of \lean{x}, and \lean{A} the type of the root variable of
+\lean{x}. For the projection of indexing into a slice, we can give a generic
+definition, but for other projections such as struct fields, we will have to
+generate them at translation time.
+
+\begin{minted}{lean}
+definition lens.index (Inner : Type₁) (index : ℕ) : lens (slice Inner) Inner :=
+⦃lens,
+  get := λ self, sem.lift_opt (list.nth self index),
+  set := λ self, sem.lift_opt ∘ list.update self index⦄
+\end{minted}
+
+There is one projection we have to special case: dereferencing an lvalue as in
+\rust{*x}. If \rust{x} is an immutable reference, this is just the identity lens
+because \rust{&T} and \rust{T} are translated to the same type. If it is a
+mutable reference, we compose with its lens to obtain a lens on the ultimate
+root variable.
+
+\begin{sbs1}
+let x: &mut [i32] = &mut a;
+let y = &mut (*x)[1];
+\end{sbs1}
+\begin{sbs2}
+let x := lens.id in
+let y := lens.index _ (1 : nat) ∘ₗ x in
+...
+\end{sbs2}
+
+There is a final technicality involved with creating mutable references. Because
+in Rust a reference is represented merely by an address, index projections are
+checked to be in bounds when creating the reference, whereas \lean{lens.index}
+will return \lean{mzero} only when its getter or setter is used. Therefore, we
+``probe'' lenses eagerly after creation by invoking their getter in order to
+make sure we exhibit the same termination behavior as the original code.
+
+\subsection{Pointer Bookkeeping}
+
+In order to actually invoke \lean{lens.get} or \lean{lens.set}, we also need to
+pass it the ``outer'' object, \ie the root variable of the original borrow. This
+is not a kind of information we can dynamically save alongside the lens in the
+mutable reference, but we instead have to statically determine at translation
+time. For now, we represent this information as a mapping from variable names to
+variable names.
+
+\begin{minted}{rust}
+let x: &mut [i32] = &mut a; // {'x' ~> 'a'}
+// moving &mut
+let x2 = x;                 // {'x' ~> 'a', 'x2' ~> 'a'}
+// reborrowing &mut
+let y = &mut (*x2)[1];      // {'x' ~> 'a', 'x2' ~> 'a', 'y' ~> 'a'}
+\end{minted}
+
+While this approach has proved sufficient so far, it does impose
+the following limitations:
+
+\begin{itemize}
+\item Mutable references can only be stored directly in variables, not nested in
+  some structure. This also means that we do not have to worry about how to
+  represent mutable references in data types, yet.
+\item Whereas a completely static mapping works for linear code, it cannot work
+  for variables that are part of a loop state in general. We could lift this
+  restriction for the most common special case where the loop changes the lens,
+  but not the root variable of a reference.
+\end{itemize}
+
+\subsection{Passing Mutable References}
+
+In \autoref{sec:rust}, we introduced references as a more ergonomic (and
+efficient) way of passing ownership of a value to some function and getting back the
+old or (in the case of mutable references) new value from the function. While we
+do not have to worry about ownership in Lean, we can still invert this pattern
+for passing mutable references in Lean. For each mutable reference argument, we
+read the current value through the lens, pass it to the function, get back the new
+value as part of the return value, and write it back through the lens. Inside
+the called function, we immediately re-wrap the value in the identity lens.
+
+\begin{sbs1}
+fn f(x: &mut T) -> R {...}
+...
+
+let x: &mut T = &mut ...a...;
+let y = f(x);
+\end{sbs1}
+\begin{sbs2}
+definition f : (xₐ : T) : sem (R × T) :=
+let x := lens.id in -- {'x' ~> 'xₐ'}
+...
+
+let x = ... in
+do tmp ← lens.get x a;
+do ret ← f tmp;
+match ret with
+| (y, tmp) :=
+  do a ← lens.set x a tmp;
+  ...
+end
+\end{sbs2}
+
+There is a small caveat with this approach: It does not work if a parameter's type is
+declared to be a type parameter, but then instantiated to a mutable reference.
+
+\subsection{Returning Mutable References}
+
+While passing mutable references to functions has a rather simple desugaring,
+returning them is a very different beast altogether: The caller has no idea
+where the reference is pointing to. For now, we restrict ourselves to the
+special case of returning
+mutable references that point into the first parameter, which in particular covers all
+methods that return references pointing into their \rust{&mut self} parameter.
+We statically check this property when translating the callee, and then use that
+knowledge to compose the returned lens with the lens of the first argument. Note
+that we still have to return the new pointee for the first argument, as by the
+previous section.
+
+\begin{sbs1}
+fn f(x: &mut T) -> &mut R {...}
+...
+
+let x: &mut T = &mut ...a...;
+let y = f(x);
+\end{sbs1}
+\begin{sbs2}
+definition f : (xₐ : T) : sem (lens T R × T) := ...
+
+let x = ... in
+do tmp ← lens.get x a;
+do ret ← f tmp;
+match ret with
+| (y, tmp) :=
+  let y := y ∘ₗ x in
+  do a ← lens.set x a tmp;
+  ...
+end
+\end{sbs2}
+
+% \subsection{Discussion}
+% 
+% The astute reader may notice that our lens representation of mutable references
+% does not actually make use of their uniqueness property; while we do utilize the
+% absence of aliasing for representing the more common immutable references
+% (\autoref{sec:refs}), two lenses focused one the same object could in theory
+% coexist because they do not hold any state on their own.
+% 
+% We could indeed make use of the aliasing property by saving the state in the
+% lens itself and writing it back only at the lens' end of lifetime.
+% 
+% \begin{minted}{lean}
+% structure lens (Outer Inner : Type₁) :=
+% (value : Inner)
+% (set : Outer → Inner → sem Outer)
+% \end{minted}
+% 
+% While this arguably simpler representation would save us a monadic bind when
+% reading from a mutable reference, there are one technical reason and two arguments
+% of future extensibility that made us go with the former representation. 
