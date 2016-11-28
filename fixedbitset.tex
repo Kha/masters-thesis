@@ -1,0 +1,321 @@
+\section{Case Study: Partial Verification of \texttt{FixedBitSet}}
+\label{sec:fixedbitset}
+
+Whereas our first case study focused on algorithmic verification, for our second
+study we chose the \rust{FixedBitSet} data structure from the \rust{fixedbitset}
+crate\footnote{https://docs.rs/fixedbitset/}. It can be thought of as
+a more efficient version of \rust{Vec<bool>} that stores elements packed at the bit
+level. While it is not a complex data structure, verifying it does require
+reasoning about the following important parts:
+
+\begin{itemize}
+  \item The ubiquitous \rust{Vec} type from the standard library, which
+    \rust{FixedBitSet} uses internally
+  \item Data structure invariants
+  \item Bitwise operations
+\end{itemize}
+
+\subsection{The Rust Implementation}
+
+\rust{FixedBitSet} uses an internal \rust{Vec} to store up to 32 bits per element.
+
+\begin{minted}{rust}
+type Block = u32;
+
+pub struct FixedBitSet {
+  data: Vec<Block>,
+  /// length in bits
+  length: usize,
+}
+\end{minted}
+
+We will focus on three basic operations: creating (\rust{with_capacity}),
+manipulating (\rust{insert}), and querying (\rust{contains}) a
+\rust{FixedBitSet}. The Rust implementations are shown in \autoref{lst:fixedbitset}.
+
+\begin{listing}[bt!]
+\begin{minted}{lean}
+const BITS: usize = 32;
+fn div_rem(x: usize, d: usize) -> (usize, usize) {
+  (x / d, x % d)
+}
+
+impl FixedBitSet
+{
+  pub fn with_capacity(bits: usize) -> Self {
+    let (mut blocks, rem) = div_rem(bits, BITS);
+    blocks += (rem > 0) as usize;
+    FixedBitSet {
+      data: vec![0; blocks],
+      length: bits,
+    }
+  }
+
+  pub fn insert(&mut self, bit: usize) {
+    assert!(bit < self.length);
+    let (block, i) = div_rem(bit, BITS);
+    unsafe {
+      *self.data.get_unchecked_mut(block) |= 1 << i;
+    }
+  }
+
+  pub fn contains(&self, bit: usize) -> bool {
+    let (block, i) = div_rem(bit, BITS);
+    match self.data.get(block) {
+      None => false,
+      Some(b) => (b & (1 << i)) != 0,
+    }
+  }
+  ...
+}
+\end{minted}
+
+  \caption{The Rust implementations of the three methods}
+  \label{lst:fixedbitset}
+\end{listing}
+
+\subsection{Prelude: Axiomatizing \texttt{collections::vec::Vec}}
+
+\rust{Vec} is the standard type for dynamically-sized arrays in Rust. It is
+implemented on top of an unsafe abstraction called \rust{RawVec} that handles
+allocating, resizing, and deallocating the array memory. \rust{Vec} provides a
+safe interface on top of that type by additionally keeping track of ownership of individual items
+via a \rust{len} field. Elements after the first \rust{len} items are not
+logically part of the \rust{Vec} and must be viewed as unitialized storage.
+
+\begin{minted}{rust}
+pub struct Vec<T> {
+    buf: RawVec<T>,
+    len: usize,
+}
+\end{minted}
+
+When axiomatizing data structures, we are free to choose any abstraction as long
+as the operations on it preserve their semantics. Just as with arrays and
+slices, Lean's basic \lean{list} type is a natural representation for
+\rust{Vec}.
+
+\begin{minted}{lean}
+structure Vec (T : Type₁) :=
+(buf : list T)
+\end{minted}
+
+We do lose information about the \rust{RawVec}'s length (also called the
+\rust{Vec}'s \emph{capacity}) here, but this information is not exposed by the
+\rust{Vec} operations \rust{FixedBitSet} depends on.
+
+All these operations are implemented using unsafe code, so we will have to
+axiomatize all of them too. \autoref{lst:vec} lists the Lean implementations of
+the \rust{Vec} methods, none of which should be surprising.
+
+\begin{listing}[bt!]
+\begin{minted}{lean}
+namespace «Vec<T>»
+  parameter {T : Type₁}
+
+  definition new : sem (Vec T) :=
+  return (Vec.mk [])
+
+  -- note: only a runtime upper bound
+  definition push (self : Vec T) (value : T) : sem (unit × Vec T) :=
+  sem.incr (list.length (Vec.buf self)) (return (unit.star, Vec.mk (Vec.buf self ++ [value])))
+
+  -- note: `pop` never resizes the `Vec`, so it is always constant-time
+  definition pop (self : Vec T) : sem (Vec T × Option T) :=
+  match reverse (Vec.buf self) with
+  | x :: xs := return (Vec.mk (reverse xs), Option.Some x)
+  | []      := return (self, Option.None)
+  end
+
+  definition clear (self : Vec T) : sem (Vec T) :=
+  sem.incr (list.length (Vec.buf self)) new
+
+  definition len (self : Vec T) : sem usize :=
+  return (list.length (Vec.buf self))
+end «Vec<T>»
+\end{minted}
+  
+  \caption{Axiomatizations of relevant \rust{Vec} methods}
+  \label{lst:vec}
+\end{listing}
+
+\rust{Vec} also implements the \rust{Deref} trait, which makes values of type
+\rust{&Vec<T>} automatically coerce to \rust{&[T]} and is implicitly being used
+in \rust{FixedBitSet::contains}. This is easy enough to implement using our abstraction.
+
+\begin{minted}{lean}
+definition «collections.vec.Vec<T> as core.ops.Deref».deref {T : Type₁} (self : Vec T) :
+  sem (slice T) :=
+return (Vec.buf self)
+\end{minted}
+
+There is also a corresponding \rust{DerefMut} trait that makes \rust{&mut
+  Vec<T>} coerce to \rust{&mut [T]}. The implementation is slightly more
+interesting because it has to return a lens focusing on \lean{Vec.buf}.
+
+\begin{minted}{lean}
+definition «collections.vec.Vec<T> as core.ops.DerefMut».deref_mut {T : Type₁} (self : Vec T) :
+  sem (lens (Vec T) (slice T) × Vec T) :=
+return (⦃lens, get := return ∘ Vec.buf, set := λ old, return ∘ Vec.mk⦄,
+        self)
+\end{minted}
+
+This trait implementation is being being used by \rust{FixedBitSet::insert} to
+access \rust{[T]::get_unchecked_mut}, which returns a mutable reference to a slice
+element.
+
+\begin{minted}{lean}
+definition «[T]».get_unchecked_mut {T : Type₁} (self : slice T) (index : usize) :
+  sem (lens (slice T) T × slice T) :=
+sem.guard (index < length self) (return (lens.index _ index, self))
+\end{minted}
+
+This method is interesting in that it actually is unsafe to call in Rust --
+instead of an explicit panic, an out-of-bounds access will silently invoke
+undefined behavior.
+
+\begin{minted}{rust}
+unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut T {
+    &mut *self.as_mut_ptr().offset(index as isize)
+}
+\end{minted}
+
+There is also a safe, panicking variant called \rust{[T]::get_mut}, which we
+first mentioned in \autoref{sec:related} as not being expressible in other
+verifiable languages. Because our semantics monad does not differentiate between
+undefined behavior and panics, both functions become semantically equivalent in
+our translation and we can translate calls to both of them, including the
+small bit of unsafe code in \rust{FixedBitSet::insert}.
+
+\subsection{Formal Specification}
+
+There is no useful abstract specification we could give \rust{contains} without
+essentially restating its implementation. Instead, we use it to \emph{build} an
+abstraction: We translate \rust{FixedBitSet} to a Lean set of indices.
+
+\begin{minted}{lean}
+abbreviation sem.returns {A : Type₁} (x : A) := sem.terminates_with (λ a, a = x)
+
+open FixedBitSet
+
+definition to_set (s : FixedBitSet) : set usize :=
+{bit | bit < length s ∧ sem.returns bool.tt (contains s bit)}
+\end{minted}
+
+We constrain \lean{bit} by \lean{length s} because there is another method
+that can break the assumption that \lean{contains} should return \rust{false}
+for all other indices.
+
+\begin{minted}{rust}
+/// View the bitset as a mutable slice of `u32` blocks. Writing past the bitlength in the last
+/// will cause `contains` to return potentially incorrect results for bits past the bitlength.
+pub fn as_mut_slice(&mut self) -> &mut [u32]
+\end{minted}
+
+%To make the definition meaningful, we also show that \rust{contains} does
+%indeed terminate (for any index).
+With this definition, we can give \rust{insert} a natural specification using
+standard Lean \lean{set} operations.
+
+\begin{minted}{lean}
+lemma insert.spec (s : FixedBitSet) (bit : usize) : bit < length s →
+  sem.terminates_with
+    (λ ret,
+      let s' := ret.2 in
+      to_set s' = to_set s ∪ '{bit})
+    (insert s bit)
+\end{minted}
+
+To prove this lemma, we will also need a type invariant on \rust{FixedBitSet} relating its two
+fields: The \rust{Vec} should always have the minimum length, that is, the
+number of bits divided by 32, then rounded up. As with traits, we specify the
+invariant as a type class.
+
+\begin{minted}{lean}
+structure FixedBitSet' [class] (self : FixedBitSet) : Prop :=
+(length_eq : nat.div_ceil (length self) 32 = list.length (Vec.buf (data self)))
+\end{minted}
+
+This invariant should be fulfilled by the only constructor, \rust{with_capacity}.
+
+\begin{minted}{lean}
+lemma with_capacity_inv (bits : usize) [is_usize bits] :
+  sem.terminates_with FixedBitSet' (with_capacity bits)
+\end{minted}
+
+After adding the hypothesis \lean{[FixedBitSet' s]} to \lean{insert.spec}, the
+lemma becomes provable. We also show that the invariant is uphold, \ie that
+\lean{FixedBitSet' s'} holds.
+
+\subsection{Proof}
+
+We will focus on the correctness proof of \lean{insert}. With 77 lines, it is
+quite shorter (and simpler) than the binary search proof, so we will show some
+more details, including some reasoning about bitwise operations.
+
+We again start by unfolding definitions and simplifying the resulting goal. We
+also eliminate some bounds checks, introducing \lean{bit_block} for the \rust{u32} block
+\lean{bit} is part of, and \lean{l'} and \lean{s'} for the updated list and
+\lean{FixedBitSet}, respectively.
+
+\begin{minted}{lean}
+...
+bit_block : ℕ,
+bit_block_eq : list.nth (Vec.buf (FixedBitSet.data s)) (bit / 32) = some bit_block,
+l' : list ℕ,
+l'_eq : list.update (Vec.buf (FixedBitSet.data s)) (bit / 32) (bit_block ||[32] 2 ^ (bit % 32)) = some l'
+s' : FixedBitSet
+s'_eq : s' = FixedBitSet.mk (Vec.mk l') (FixedBitSet.length s)
+⊢ FixedBitSet' s' ∧ to_set s' = to_set s ∪ '{bit}
+\end{minted}
+
+Here the notation \lean{||[32]} is an abbreviation for \lean{bitor 32}.
+
+We show the data type invariant by a helper lemma saying that
+\lean{list.length} is invariant under \lean{list.update}. After unfolding
+\lean{to_set} and some more simplifications, we are left with a propositional
+formula that asserts that some index \lean{bit'} is in the new set iff it is in
+the old set or is equal to \lean{bit}.
+
+\begin{minted}{lean}
+...
+bit' : ℕ
+⊢ bit' < FixedBitSet.length s ∧ sem.returns bool.tt (FixedBitSet.contains s' bit') ↔
+  bit' < FixedBitSet.length s ∧ sem.returns bool.tt (FixedBitSet.contains s bit') ∨ bit' = bit
+\end{minted}
+
+If \lean{bit'} is not a valid index (\lean{bit' ≥ FixedBitSet.length s}), the
+goal reduces to \lean{bit' ≠ bit}, which holds because \lean{bit} is assumed to
+be valid. If, on the other hand, \lean{bit'} is valid, we will have to reason
+about the two \lean{contains} calls. After unfolding them and some more
+simplifications, we are left with a bit-level formula talking about the
+\rust{u32} block for \lean{bit'} in the old set (\lean{bit'_block}) and in the
+new set (\lean{bit'_block'}), respectively.
+
+\begin{minted}{lean}
+...
+bit'_block bit'_block' : ℕ,
+bit'_block_eq : list.nth (Vec.buf (FixedBitSet.data s)) (bit' / 32) = some bit'_block,
+bit'_block'_eq : if bit / 32 = bit' / 32 then some (bit_block ||[32] 2 ^ (bit % 32)) else some bit'_block
+⊢ bit'_block' &&[32] 2 ^ (bit' % 32) ≠ 0 ↔
+  bit'_block &&[32] 2 ^ (bit' % 32) ≠ 0 ∨ bit' = bit
+\end{minted}
+
+We proceed by splitting the goal according to the conditional in
+\lean{bit'_block'_eq}. In the case \lean{bit / 32 ≠ bit' / 32}, we obtain
+\lean{bit'_block' = bit'_block} and \lean{bit' ≠ bit}, closing the goal. In less
+formal words, \lean{bit'} turned out to be in a block entirely unaffected by the
+whole insertion.
+
+In the other case, we get \lean{bit'_block = bit_block} and the goal reduces to
+a proposition about two bits in the same block.
+
+\begin{minted}{lean}
+⊢ (bit_block ||[32] 2 ^ (bit % 32)) &&[32] 2 ^ (bit' % 32) ≠ 0 ↔
+  bit_block &&[32] 2 ^ (bit' % 32) ≠ 0 ∨ bit' = bit
+\end{minted}
+
+Assuming \lean{bit' = bit}, we see that both sides become universally true.
+Otherwise, if \lean{bit' ≠ bit}, but \lean{bit / 32 = bit' / 32} by the previous
+assumption, we obtain \lean{bit' % 32 ≠ bit % 32}. We prove that this cancels
+out the bitwise or and thus reduces both sides to the same term, concluding the proof.
