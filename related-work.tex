@@ -26,7 +26,7 @@ let get_mut (a : array int) (i : int) : ref int = ref a[i]
 In contrast, Rust can provide a perfectly safe function with this functionality.
 
 \begin{minted}{rust}
-fn slice::get_mut<T>(slice: &mut [T], index: usize) -> Option<&mut T>
+fn get_mut<T>(slice: &mut [T], index: usize) -> &mut T
 \end{minted}
 
 WhyML is also being used as an intermediate language for the verification of

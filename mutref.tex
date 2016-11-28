@@ -1,16 +1,16 @@
 \section{Transformation of Mutable References}
 \label{sec:mutref}
 
-The basic transformation already allows us to reason about mutability in
+As the previous section showed, the basic transformation already allows us to reason about mutability in
 form of local variables, including inside loops. The next step is to support
 non-local or indirect mutability in form of mutable references. We will develop
-a restricted but extendable transformation of mutable references in this chapter
-and put it to use in the next chapter.
+a restricted but extendable transformation of mutable references in this section
+and put it to use in the next section.
 
 \subsection{Lenses as Functional References}
 
 In order to correctly translate mutable references, we will take a more careful
-look at their structure in the MIR \autoref{sec:mir}. Mutable references are
+look at their structure in the MIR (\autoref{sec:mir}). Mutable references are
 created by the \rust{&mut x} syntax, which in MIR operates on \emph{lvalues}.
 
 \begin{minted}{rust}
@@ -65,8 +65,8 @@ infixr ` ∘ₗ `:60 := lens.comp
 With this, we can translate the \rust{&mut x} operation: We generate a lens per
 projection, then compose them together to obtain a value of type \lean{lens A B}
 where \lean{B} is the type of \lean{x}, and \lean{A} the type of the root variable of
-\lean{x}. For the projection of indexing into a slice, we can give a generic
-definition, but for other projections such as struct fields, we will have to
+\lean{x}. For the projection of indexing into an array or slice we can give a generic
+definition, but for other projections such as struct fields we will have to
 generate them at translation time.
 
 \begin{minted}{lean}
@@ -80,7 +80,7 @@ There is one projection we have to special case: dereferencing an lvalue as in
 \rust{*x}. If \rust{x} is an immutable reference, this is just the identity lens
 because \rust{&T} and \rust{T} are translated to the same type. If it is a
 mutable reference, we compose with its lens to obtain a lens on the ultimate
-root variable.
+root variable. This combination of referencing and dereferencing is also known as ``reborrowing''.
 
 \begin{sbs1}
 let x: &mut [i32] = &mut a;
@@ -88,7 +88,7 @@ let y = &mut (*x)[1];
 \end{sbs1}
 \begin{sbs2}
 let x := lens.id in
-let y := lens.index _ (1 : nat) ∘ₗ x in
+let y := lens.index _ 1 ∘ₗ x in
 ...
 \end{sbs2}
 
@@ -111,12 +111,12 @@ variable names.
 \begin{minted}{rust}
 let x: &mut [i32] = &mut a; // {'x' ~> 'a'}
 // moving &mut
-let x2 = x;                 // {'x' ~> 'a', 'x2' ~> 'a'}
+let x2 = x;                 // {'x2' ~> 'a'}
 // reborrowing &mut
-let y = &mut (*x2)[1];      // {'x' ~> 'a', 'x2' ~> 'a', 'y' ~> 'a'}
+let y = &mut (*x2)[1];      // {'x2' ~> 'a', 'y' ~> 'a'}
 \end{minted}
 
-While this approach has proved sufficient so far, it does impose
+While this simple mapping has proved sufficient so far, it does impose
 the following limitations:
 
 \begin{itemize}
@@ -174,9 +174,9 @@ special case of returning
 mutable references that point into the first parameter, which in particular covers all
 methods that return references pointing into their \rust{&mut self} parameter.
 We statically check this property when translating the callee, and then use that
-knowledge to compose the returned lens with the lens of the first argument. Note
+knowledge in the caller to compose the returned lens with the lens of the first argument. Note
 that we still have to return the new pointee for the first argument, as by the
-previous section.
+previous subsection.
 
 \begin{sbs1}
 fn f(x: &mut T) -> &mut R {...}

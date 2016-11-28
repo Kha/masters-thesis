@@ -10,7 +10,7 @@ reasoning about the following important parts:
 
 \begin{itemize}
   \item The ubiquitous \rust{Vec} type from the standard library, which
-    \rust{FixedBitSet} uses internally
+    \rust{FixedBitSet} uses internally, including mutable references into it
   \item Data structure invariants
   \item Bitwise operations
 \end{itemize}
@@ -34,14 +34,13 @@ manipulating (\rust{insert}), and querying (\rust{contains}) a
 \rust{FixedBitSet}. The Rust implementations are shown in \autoref{lst:fixedbitset}.
 
 \begin{listing}[bt!]
-\begin{minted}{lean}
+\begin{minted}{rust}
 const BITS: usize = 32;
 fn div_rem(x: usize, d: usize) -> (usize, usize) {
   (x / d, x % d)
 }
 
-impl FixedBitSet
-{
+impl FixedBitSet {
   pub fn with_capacity(bits: usize) -> Self {
     let (mut blocks, rem) = div_rem(bits, BITS);
     blocks += (rem > 0) as usize;
@@ -90,7 +89,8 @@ pub struct Vec<T> {
 }
 \end{minted}
 
-When axiomatizing data structures, we are free to choose any abstraction as long
+Because \lean{Vec} provides a safe interface, but is itself implemented using
+(predominantly) unsafe code, we both can and have to axiomatize it. When axiomatizing data structures, we are free to choose any abstraction as long
 as the operations on it preserve their semantics. Just as with arrays and
 slices, Lean's basic \lean{list} type is a natural representation for
 \rust{Vec}.
@@ -106,7 +106,7 @@ We do lose information about the \rust{RawVec}'s length (also called the
 
 All these operations are implemented using unsafe code, so we will have to
 axiomatize all of them too. \autoref{lst:vec} lists the Lean implementations of
-the \rust{Vec} methods, none of which should be surprising.
+the needed \rust{Vec} methods, none of which should be surprising.
 
 \begin{listing}[bt!]
 \begin{minted}{lean}
@@ -161,7 +161,7 @@ return (⦃lens, get := return ∘ Vec.buf, set := λ old, return ∘ Vec.mk⦄,
 \end{minted}
 
 This trait implementation is being being used by \rust{FixedBitSet::insert} to
-access \rust{[T]::get_unchecked_mut}, which returns a mutable reference to a slice
+access \rust{[T]::get_unchecked_mut}, which in turn returns a mutable reference to a slice
 element.
 
 \begin{minted}{lean}
@@ -184,7 +184,7 @@ There is also a safe, panicking variant called \rust{[T]::get_mut}, which we
 first mentioned in \autoref{sec:related} as not being expressible in other
 verifiable languages. Because our semantics monad does not differentiate between
 undefined behavior and panics, both functions become semantically equivalent in
-our translation and we can translate calls to both of them, including the
+our transformation and we can translate calls to both of them, including the
 small bit of unsafe code in \rust{FixedBitSet::insert}.
 
 \subsection{Formal Specification}
@@ -214,7 +214,7 @@ pub fn as_mut_slice(&mut self) -> &mut [u32]
 
 %To make the definition meaningful, we also show that \rust{contains} does
 %indeed terminate (for any index).
-With this definition, we can give \rust{insert} a natural specification using
+With \lean{to_set}, we can give \rust{insert} a natural specification using
 standard Lean \lean{set} operations.
 
 \begin{minted}{lean}
@@ -226,7 +226,7 @@ lemma insert.spec (s : FixedBitSet) (bit : usize) : bit < length s →
     (insert s bit)
 \end{minted}
 
-To prove this lemma, we will also need a type invariant on \rust{FixedBitSet} relating its two
+To prove this lemma, we will also need a data type invariant on \rust{FixedBitSet} relating its two
 fields: The \rust{Vec} should always have the minimum length, that is, the
 number of bits divided by 32, then rounded up. As with traits, we specify the
 invariant as a type class.
@@ -263,18 +263,16 @@ also eliminate some bounds checks, introducing \lean{bit_block} for the \rust{u3
 bit_block : ℕ,
 bit_block_eq : list.nth (Vec.buf (FixedBitSet.data s)) (bit / 32) = some bit_block,
 l' : list ℕ,
-l'_eq : list.update (Vec.buf (FixedBitSet.data s)) (bit / 32) (bit_block ||[32] 2 ^ (bit % 32)) = some l'
-s' : FixedBitSet
+l'_eq : list.update (Vec.buf (FixedBitSet.data s)) (bit / 32) (bit_block ||[32] 2 ^ (bit % 32)) = some l',
+s' : FixedBitSet,
 s'_eq : s' = FixedBitSet.mk (Vec.mk l') (FixedBitSet.length s)
 ⊢ FixedBitSet' s' ∧ to_set s' = to_set s ∪ '{bit}
 \end{minted}
 
-Here the notation \lean{||[32]} is an abbreviation for \lean{bitor 32}.
-
-We show the data type invariant by a helper lemma saying that
+Here the notation \lean{||[32]} is an abbreviation for \lean{bitor 32}. We show the data type invariant by a helper lemma saying that
 \lean{list.length} is invariant under \lean{list.update}. After unfolding
-\lean{to_set} and some more simplifications, we are left with a propositional
-formula that asserts that some index \lean{bit'} is in the new set iff it is in
+\lean{to_set} and some more simplifications, we are left with a
+goal that asserts that some index \lean{bit'} is in the new set iff it is in
 the old set or is equal to \lean{bit}.
 
 \begin{minted}{lean}
@@ -288,7 +286,7 @@ If \lean{bit'} is not a valid index (\lean{bit' ≥ FixedBitSet.length s}), the
 goal reduces to \lean{bit' ≠ bit}, which holds because \lean{bit} is assumed to
 be valid. If, on the other hand, \lean{bit'} is valid, we will have to reason
 about the two \lean{contains} calls. After unfolding them and some more
-simplifications, we are left with a bit-level formula talking about the
+simplifications, we are left with a bit-level goal talking about the
 \rust{u32} block for \lean{bit'} in the old set (\lean{bit'_block}) and in the
 new set (\lean{bit'_block'}), respectively.
 
@@ -296,7 +294,7 @@ new set (\lean{bit'_block'}), respectively.
 ...
 bit'_block bit'_block' : ℕ,
 bit'_block_eq : list.nth (Vec.buf (FixedBitSet.data s)) (bit' / 32) = some bit'_block,
-bit'_block'_eq : if bit / 32 = bit' / 32 then some (bit_block ||[32] 2 ^ (bit % 32)) else some bit'_block
+bit'_block'_eq : (if bit / 32 = bit' / 32 then some (bit_block ||[32] 2 ^ (bit % 32)) else some bit'_block) = some bit'_block'
 ⊢ bit'_block' &&[32] 2 ^ (bit' % 32) ≠ 0 ↔
   bit'_block &&[32] 2 ^ (bit' % 32) ≠ 0 ∨ bit' = bit
 \end{minted}
@@ -315,7 +313,7 @@ a proposition about two bits in the same block.
   bit_block &&[32] 2 ^ (bit' % 32) ≠ 0 ∨ bit' = bit
 \end{minted}
 
-Assuming \lean{bit' = bit}, we see that both sides become universally true.
+Assuming \lean{bit' = bit}, we see that both sides of the equivalence become universally true.
 Otherwise, if \lean{bit' ≠ bit}, but \lean{bit / 32 = bit' / 32} by the previous
-assumption, we obtain \lean{bit' % 32 ≠ bit % 32}. We prove that this cancels
+assumption, we obtain \lean{bit' % 32 ≠ bit % 32}. A helper lemma proves that this cancels
 out the bitwise or and thus reduces both sides to the same term, concluding the proof.
