@@ -46,7 +46,13 @@ to return our semantics monad.
 structure lens (Outer Inner : Type₁) :=
 (get : Outer → sem Inner)
 (set : Outer → Inner → sem Outer)
+\end{minted}
 
+Our lens type describes how some type \lean{Inner} can be extracted from and
+replaced inside another type \lean{Outer}. For the correct combinations of those
+two types, we can give some general instances such as identity and composition.
+
+\begin{minted}{lean}
 definition lens.id {Inner : Type₁} : lens Inner Inner :=
 ⦃lens, get := return, set := λ o, return⦄
 

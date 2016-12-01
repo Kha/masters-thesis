@@ -202,12 +202,14 @@ definition to_set (s : FixedBitSet) : set usize :=
 {bit | bit < length s ∧ sem.returns bool.tt (contains s bit)}
 \end{minted}
 
-We constrain \lean{bit} by \lean{length s} because there is another method
-that can break the assumption that \lean{contains} should return \rust{false}
-for all other indices.
+The additional constraint \lean{bit < length s} may seem superfluous considering
+that \lean{contains} makes sure to always return \rust{false} for indices after
+the last \rust{u32} block. However, indices between the length and the capacity
+may not necessarily be \rust{false}, as noted in the docstring for a different method:
 
 \begin{minted}{rust}
-/// View the bitset as a mutable slice of `u32` blocks. Writing past the bitlength in the last
+/// View the bitset as a mutable slice of `u32` blocks. Writing past the
+bitlength in the last block
 /// will cause `contains` to return potentially incorrect results for bits past the bitlength.
 pub fn as_mut_slice(&mut self) -> &mut [u32]
 \end{minted}
@@ -244,7 +246,7 @@ lemma with_capacity_inv (bits : usize) [is_usize bits] :
 \end{minted}
 
 After adding the hypothesis \lean{[FixedBitSet' s]} to \lean{insert.spec}, the
-lemma becomes provable. We also show that the invariant is uphold, \ie that
+lemma becomes provable. We also show that the invariant is upheld, \ie that
 \lean{FixedBitSet' s'} holds.
 
 \subsection{Proof}

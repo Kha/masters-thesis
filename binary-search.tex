@@ -118,6 +118,7 @@ all bounds checks in it. It also elegantly avoids the common
 pitfall\footnote{https://research.googleblog.com/2006/06/extra-extra-read-all-about-it-nearly.html}
 of a potential integer overflow in less abstract code like \rust{mid = (low + high) / 2}.
 
+\newgeometry{bottom=1cm}
 \begin{sidewaysfigure}
   \includegraphics[width=\textheight]{deps}
   \caption[A complete graph of the dependencies of \rust{binary_search}]{A
@@ -136,6 +137,7 @@ of a potential integer overflow in less abstract code like \rust{mid = (low + hi
   }
   \label{fig:deps}
 \end{sidewaysfigure}
+\restoregeometry
 
 For our purposes, the abstract implementation primarily means a fair number of
 additional dependencies we have to support and inspect~(\autoref{fig:deps}). All

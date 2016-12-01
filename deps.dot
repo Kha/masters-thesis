@@ -1,5 +1,5 @@
 digraph {
-    graph [ratio=0.3];
+    graph [ratio=0.4];
     node [fontname="Source Code Pro"];
     0 [label="<[T] as slice::SliceExt>::binary_search"]
     1 [label="<[T] as slice::SliceExt>::binary_search::{{closure}}"]
@@ -23,6 +23,12 @@ digraph {
     26 [label="slice::<[T] as ops::Index<ops::RangeTo<usize>>>::index"]
     27 [label="ops::Range",shape=diamond]
     28 [label="slice::<[T] as ops::Index<ops::Range<usize>>>::index",style=dashed]
+    edge [style=invis];
+    5->12
+    23->19
+    23->26
+    8->9
+    edge [style=solid];
     0 -> 1
     0 -> 2
     0 -> 3
