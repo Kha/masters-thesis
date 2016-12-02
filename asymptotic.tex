@@ -1,0 +1,262 @@
+\section{Asymptotic Complexity Analysis}
+\label{sec:asymptotic}
+
+Monads are known for their versatility in representing various semantics,
+including side effects. So far, we have made use of our semantics monad for
+representing partiality, \ie nontermination and abnormal termination. We may in
+the future extend the monad to reason about more effects such as (unsafe) mutable global
+variables or I/O. In this section, we instead make use of the monad for verifying a
+property different from functional correctness: runtime complexity.
+
+\subsection{Classifying Asymptotic Complexity}
+
+Our formalization of multiparametric asymptotic function analysis is based on the technical
+report \emph{Formal Verification of Asymptotic Complexity Bounds
+for OCaml Programs}~\cite{gueneau}. The main insight of the report is that
+we can elegantly formalize the notation of ``going to infinity'' for an
+arbitrary number of parameters using the mathematical concept of \emph{filters},
+originally from topology.
+
+We refer to the report for a detailed description on
+filters. Fortunately for us, the Lean library already includes
+a definition of filters on sets. We will only need the filter \lean{at_infty} on
+natural numbers, the filter combinator \lean{prod_filter}, which we developed,
+as well as the ``eliminator'' \lean{eventually}.
+
+\begin{minted}{lean}
+definition at_infty : filter ℕ := ...
+notation `[at ` `∞]`  := at_infty
+
+definition prod_filter {A B : Type} (Fa : filter A) (Fb : filter B) : filter (A × B) := ...
+notation `[at ` `∞` ` × ` `∞]` := prod_filter [at ∞] [at ∞]
+
+definition eventually {A : Type} (P : A → Prop) (F : filter A) : Prop := ...
+\end{minted}
+
+A proposition such as \lean{eventually P [at ∞ × ∞]} then has the intuitive meaning
+of holding iff there exists a pair of natural numbers such that \lean{P} holds
+for all (componentwise) larger pairs.
+
+We can now formalize the notions of a function being non-strictly and strictly
+asymptotically bounded by another function, which directly lead to the usual
+notations as classes of functions.
+
+\begin{minted}{lean}
+namespace asymptotic
+  parameters {A : Type} (F : filter A)
+  variables  (e f g : A → ℕ)
+
+  protected definition le : Prop := ∃c, eventually {a | f a ≤ c * g a} F
+  protected definition lt : Prop := ∀c, eventually {a | c * f a ≤ g a} F
+  protected definition equiv : Prop := le f g ∧ le g f
+
+  definition ub  := {f | le f g}
+  definition sub := {f | lt f g}
+  definition lb  := {f | le g f}
+  definition slb := {f | lt g f}
+
+  notation `𝓞(` g `) ` F := ub F g
+  notation `𝓸(` g `) ` F := sub F g
+  notation `Ω(` g `) ` F := lb F g
+  notation `ω(` g `) ` F := slb F g
+  notation `Θ(` g `) ` F := equiv F g
+end asymptotic
+\end{minted}
+
+With the notations in place, we can prove familiar lemmas about combining
+complexity bounds for arbitrary functions and filters, and about bounds for some
+specific functions and filters.
+
+\begin{minted}{lean}
+lemma ub_subset_ub (hf : f ∈ 𝓞(g) F) : 𝓞(f) F ⊆ 𝓞(g) F := ...
+lemma ub_add (h₁ : f₁ ∈ 𝓞(g) F) (h₂ : f₂ ∈ 𝓞(g) F) : f₁ + f₂ ∈ 𝓞(g) F := ...
+lemma ub_add_left (h : f ∈ 𝓞(g₂) F) : f ∈ 𝓞(g₁ + g₂) F := ...
+lemma ub_add_const (h : f₁ ∈ 𝓞(g) F ∩ Ω(λ x, k) F) :
+  f₁ + (λ x, k) ∈ 𝓞(g) F ∩ Ω(λ x, k) F := ..
+lemma ub_const : (λa, k) ∈ 𝓞(1) F := ...
+lemma ub_mul_prod_filter (h₁ : f₁ ∈ 𝓞(g₁) F₁) (h₂ : f₂ ∈ 𝓞(g₂) F₂) :
+  (λp, f₁ p.1 * f₂ p.2) ∈ 𝓞(λp, g₁ p.1 * g₂ p.2) (prod_filter F₁ F₂) := ...
+
+
+lemma log_unbounded {b : ℕ} (H : b > 1) : log b ∈ ω(1) [at ∞] := ...
+lemma id_unbounded : id ∈ ω(1) [at ∞] := ...
+\end{minted}
+
+\subsection{Verifying the Asymptotic Complexity of \texttt{[T]::binary\_search}}
+
+As described in \autoref{sec:sem}, our semantics monad contains a step counter
+that is incremented on each function call and loop iteration. Because only a
+constant number of instructions can be executed between any such two events for
+a given program, the step count of an execution is asymptotically equivalent to the instruction
+count, which is usually assumed to be asymptotically equivalent to the running time.
+
+We extend our existing correctness proof of \lean{binary_search} by introducing
+a new predicate that tests both the return value and the step count.
+
+\begin{minted}{lean}
+inductive sem.terminates_with_in {a : Type₁} (H : a → Prop) (max_cost : ℕ) : sem a → Prop :=
+mk : Π {x k}, H x → k ≤ max_cost → sem.terminates_with_in H max_cost (some (x, k))
+\end{minted}
+
+Because we will only prove asymptotic upper bounds, we also use an upper bound
+in the definition in order to simplify reasoning about specific cost functions.
+If we wanted to use operators other than \lean{𝓞}, we should turn the inequality
+into an equality.
+
+This time we analyze the function bottom-up, starting with a single loop iteration, \ie
+a call of \lean{loop_4}. With all dependencies unfolded, we quickly obtain a
+constant bound on the step count for everything except the trait call to
+\lean{Ord.cmp}, of whose complexity we have absolutely no information. In order
+to obtain the textbook bound of $\mathcal{O}(\log n)$ for binary search, we would
+have to assume that comparing two elements takes only constant time. That is
+certainly not true for all implementations of the trait and such a
+restriction would be a shame since we did a general correctness proof for any
+decidable linear order. Thus we instead introduce a more dynamic upper bound for
+the call: the maximum of all execution costs of such comparisons.
+
+\begin{minted}{lean}
+-- recall our extension of `Ord` from Section 5.3
+structure Ord' [class] (T : Type₁) extends Ord T, decidable_linear_order T :=
+(cmp_eq : ∀ x y : T, Σ k, cmp x y = some (ordering x y, k))
+
+definition Ord'.cmp_max_cost {T : Type₁} [Ord' T] (y : T) (xs : list T) :=
+-- extracts `k` from the above definition
+Max x ∈ to_finset xs, sigma.pr1 (cmp_eq x y)
+\end{minted}
+
+Now we can prove a specific upper bound of \lean{Ord'.cmp_max_cost needle self +
+  15} for the loop body. Finally, we abstract from this explicit cost function
+to an asymptotic bound.
+
+\begin{minted}{lean}
+lemma loop_4.spec :
+  ∃ c ∈ 𝓞(id) [at ∞],
+  ∀ self needle s base, sorted le self → is_slice self → loop_4_invar self needle s base →
+  sem.terminates_with_in
+    (loop_4_res self needle s)
+    (c (Ord'.cmp_max_cost needle self))
+    (loop_4 (closure_5642.mk needle, base, s)) :=
+exists.intro (λ n, n + 15) ...
+\end{minted}
+
+This lemma says that the execution cost of \lean{loop_4} is linearly bound by
+the maximum comparison cost. In general, we have to separate the \emph{measure}
+function that reduces the input data to a natural number (here
+\lean{cmp_max_cost}) and the (abstract or specific) cost function that describes
+the asymptotic behavior of the measure result, since we cannot define the latter
+on arbitrary domains. The composition of both then gives us the actual upper
+bound function.
+
+We also have to make sure to introduce any parameters the
+measure depends on only after the existential quantifier. This makes the
+definitions slightly more verbose since we cannot use the convenient
+\lean{section} mechanisms with them any more.
+
+Going up, we expect the running time of the whole loop to be that of the body
+multiplied with \lean{log₂ (length self)}. Formally, we again have to split the
+measure function \lean{length} from the asymptotic cost function \lean{log₂}.
+
+\begin{minted}{lean}
+lemma loop_loop_4.spec :
+  ∃₀ f ∈ 𝓞(λp, log₂ p.1 * p.2) [at ∞ × ∞],
+  ∀ self needle, is_slice self → sorted le self → sem.terminates_with_in
+    (binary_search_res self needle)
+    (f (length self, Ord'.cmp_max_cost needle self))
+    (loop loop_4 (closure_5642.mk needle, 0, self)) := ...
+\end{minted}
+
+As with the functional correctness proof, we can show this lemma by well-founded
+recursion. However, proving that a loop is asymptotically bounded by an
+iteration upper bound multiplied by an upper bound for the body should be a
+common occurence, so we have extracted the proof into a general theorem.
+
+\begin{minted}{lean}
+theorem loop.terminates_with_in_ub
+  {In State Res : Type₁}
+  (body : In → State → sem (State + Res))
+  (pre : In → State → Prop)
+  (p : In → State → State → Prop)
+  (q : In → State → Res → Prop)
+  (citer aiter : ℕ → ℕ)
+  (miter : State → ℕ)
+  (cbody abody : ℕ → ℕ)
+  (mbody : In → State → ℕ)
+  (citer_aiter : citer ∈ 𝓞(aiter) [at ∞] ∩ Ω(1) [at ∞])
+  (cbody_abody : cbody ∈ 𝓞(abody) [at ∞] ∩ Ω(1) [at ∞])
+  (pre_p : ∀ args s, pre args s → p args s s)
+  (step : ∀ args init s, pre args init → p args init s →
+    sem.terminates_with_in (λ x, match x with
+      | inl s' := p args init s' ∧ citer (miter s') < citer (miter s)
+      | inr r  := q args init r
+      end) (cbody (mbody args init)) (body args s)) :
+  ∃ f ∈ 𝓞(λ p, aiter p.1 * abody p.2) [at ∞ × ∞], ∀ args s, pre args s →
+    sem.terminates_with_in (q args s) (f (miter s, mbody args s))
+      (loop (body args) s) := ...
+\end{minted}
+
+This may very well be the most complex theorem of our work, at least by
+signature. Going through the explicit parameters from top to bottom, we have the
+loop body, the precondition, the invariant (which may depend on both the initial
+and current state), the postcondition, the concrete and asymptotic bound and
+measure function of the iteration count and the same for the body. These are
+followed by assumptions that the asymptotic bounds are correct, that the
+precondition implies the invariant, and that a loop iteration either continues
+the loop with the invariant upheld and the concrete iteration count reduced or
+breaks the loop while satisfying the postcondition. In the end, the conclusion says
+that the loop, measured by the product of the measure functions, is
+asymptotically bounded by the product of the asymptotic bounds and terminates
+with the postcondition fulfilled, as long as the precondition is satisfied.
+
+When using this theorem to prove the previous lemma, we can transfer the
+instantiations of and proofs about the precondition, invariant, and
+postcondition directly from the correctness proof, and show the asymptotic
+behavior of the body from the lemma \lean{loop_4.spec}. We are left to prove
+that the iteration count is asymptotically bounded by \lean{log₂}. Because this
+is the more interesting bound, we will show some more details of the proof.
+
+We choose the concrete bound \lean{λ n, log₂ (2 * n) + 1} for the iteration
+count and show that it is in \lean{𝓞(log₂) [at ∞]}. Because the underlying relation
+\lean{asymptotic.le} is transitive, we can make use of Lean's \lean{calc} blocks
+for this.
+
+\begin{minted}{lean}
+local infix `≼`:25 := asymptotic.le [at ∞]
+...
+
+calc (λ a, log₂ (2 * a) + 1)
+    ≼ (λ a, log₂ a + 2) : ub_of_eventually_le_at_infty 1 (
+      take a, suppose a ≥ 1,
+      calc log₂ (2 * a) + 1 = log₂ a + 1 + 1 : ...
+                        ... ≤ log₂ a + 2     : ...)
+... ≼ log₂ : ub_add asymptotic.le.refl (
+      calc (λ x, 2) ≼ (λ x, 1) : ub_const
+                ... ≼ log₂     : asymptotic.le_of_lt (log_unbounded ...))
+\end{minted}
+
+Finally, we show that the conrete iteration count is strictly decreasing. This
+follows from the premises \lean{length s' ≤ length s / 2} and \lean{length s ≠
+  0} of \lean{loop_4_step} from the correctness proof, together with the fact
+that \lean{log₂} is monotone.
+
+\begin{minted}{lean}
+calc log₂ (2 * length s') + 1
+    ≤ log₂ (length s) + 1     : ...
+... = log₂ (2 * length s)     : ...
+... < log₂ (2 * length s) + 1 : le.refl
+\end{minted}
+
+There is a single call going up from the loop to \lean{binary_search}, leaving
+the final asymptotic complexity unchanged.
+
+\begin{minted}{lean}
+theorem binary_search.spec :
+  ∃ f ∈ 𝓞(λ p, log₂ p.1 * p.2) [at ∞ × ∞],
+  ∀(self : slice T) (needle : T), is_slice self → sorted le self → sem.terminates_with_in
+    (binary_search_res self needle)
+    (f (length self, Ord'.cmp_max_cost needle self))
+    (binary_search self needle) := ...
+\end{minted}
+
+Thus, in the most general sense, the runtime of \lean{binary_search} is
+asymptotically bounded by the logarithm of the input slice's length multiplied
+with the maximum cost of comparing the needle with any element in the slice.

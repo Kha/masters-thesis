@@ -316,10 +316,11 @@ inductive loop_4_step : loop_4.state → Prop :=
 mk : Π base' s', loop_4_invar base' s' → length s' ≤ length s / 2 → length s ≠ 0 →
   loop_4_step (f₀, base', s')
 
+abbreviation loop_4_res := sum.rec (loop_4_step s) binary_search_res
 
 ⊢ loop_4_invar base s → sem.terminates_with
-    (sum.rec (loop_4_step s) binary_search_res)
-    (loop_4 R (f₀, base, s))
+    loop_4_res
+    (loop_4 (f₀, base, s))
 \end{minted}
 
 If the iteration breaks the loop (returns some \lean{sum.inr}), we need the
