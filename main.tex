@@ -16,7 +16,7 @@
 \usepackage{amsmath, mathpartir, adjustbox, geometry}
 \usepackage[labelformat=simple]{subfig}
 \usepackage[font={sf},margin=10pt,labelfont=bf]{caption}
-\usepackage{booktabs}
+\usepackage{booktabs, tabu, tabularx}
 \usepackage[colorlinks=false]{hyperref}
 \providecommand*{\listingautorefname}{Listing}
 
@@ -44,7 +44,7 @@
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
 \usepackage{todonotes, rotating}
-\usepackage{minted}
+\usepackage[draft]{minted}
 %workaround to remove red boxes
 \renewcommand{\fcolorbox}[4][]{#4}
 \usemintedstyle{tango}
@@ -218,6 +218,8 @@ asymptotic runtimes.
 \input{fixedbitset}
 \newpage
 \input{asymptotic}
+\newpage
+\input{evaluation}
 \newpage
 \section{Conclusion and Future Work}
 

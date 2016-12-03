@@ -1,0 +1,65 @@
+\section{Evaluation}
+\label{sec:eval}
+
+During our verification work, we always focused on supporting just enough of the vast Rust
+language as needed and instructed the translation tool to only translate the
+relevant definitions. Still, in order to give a more representative picture of
+our coverage of the language, we also had the tool translate as many definitions
+from the \verb!core! crate as possible. This was followed by many iterations of
+fixing edges cases in the translation where it produced invalid Lean code, which
+overall resulted in a much more robust implementation.
+
+The end result is a single file of 75694 lines of valid Lean code, which
+is about 42\% longer than the entire Lean standard library combined.
+It takes 76 seconds to parse and translate the Rust input and 29 seconds for
+Lean to type check it. With 6731
+definitions, the file contains about 45\% of all definitions in \rust{core}; see
+\autoref{tab:eval} for a detailed breakdown of the missing definitions. While we
+cannot guarantee the semantic correctness of the successfully translated
+definitions, we believe that the type correctness is a significant indicator
+for total correctness.
+
+\begin{table}[bp!]
+  \centering
+
+  % http://tex.stackexchange.com/a/180120/14563
+  \newcommand{\rowgroup}[1]{\hspace{-1em}\textbf{#1}}
+
+  \begin{tabularx}{\textwidth}{l>{\quad}X}
+    \hline
+    \#definitions & \hspace{-1em}outcome (reason) \\
+    \hline
+   6731 & \rowgroup{succeeds and type checks} \\
+   2761 & \rowgroup{succeeds, but some failed dependencies} \\
+   2649 & \rowgroup{translation failed} \\
+    713 & overriding default method (\autoref{sec:default}) \\
+    381 & \rust{&mut} nested in type (\autoref{sec:book}) \\
+    360 & variadic function signature (unsafe, used for C interoperability) \\
+    280 & float (\autoref{sec:prim}) \\
+    243 & raw pointer \\
+    209 & cast from function pointer to \rust{usize} \\
+    173 & unimplemented intrinsic function \\
+     45 & error from \rust{rustc} API during translation \\
+     40 & unimplemented rvalue  \\
+     33 & resolving builtin trait impl \\
+     29 & instantiating type parameter with \rust{&mut} (\autoref{sec:passable}) \\
+     28 & manually excluded because of timeout during type checking \\
+     23 & trait object (\autoref{sec:traitobj}) \\
+     19 & returning mutable reference to argument other than the first \\
+     16 & struct with associated type dependency \\
+     12 & unimplemented lens kind \\
+     10 & unable to resolve local trait impl from parameters \\
+      7 & closure with \rust{&mut} argument \\
+      3 & \rust{&[u8]} byte string literal \\
+      1 & \rust{&mut} loop parameter \\
+    \hline
+  \end{tabularx}
+
+  \caption{Tabulated translation results per each definition from the
+    \rust{core} crate. Only the first error per definition is recorded.
+    Curiously some supposed niche cases like variadic functions and casting from
+    function pointers to integral numbers are prominently represented, but it
+    turns out that in both cases, these are almost exclusively automatically
+    generated trait implementations up to a certain function arity.}
+  \label{tab:eval}
+\end{table}

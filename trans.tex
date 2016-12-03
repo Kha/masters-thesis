@@ -93,7 +93,7 @@ other crates.
 \label{sec:prim}
 
 Rust's primitive types are the boolean type, machine-independent and machine-dependent integer
-types, tuples, arrays, slices, and function types.
+types, floating point types, tuples, arrays, slices, and function types.
 
 Following AutoCorres' design (see \autoref{sec:related}), we map the primitive integer types to
 Lean's native arbitrary-sized types and instead handle overflow explicitly
@@ -149,6 +149,9 @@ abbreviation slice [parsing_only] := list
 definition is_slice [class] {A : Type₁} (xs : slice A) :=
 length xs < 2^(usize.bits-1)
 \end{minted}
+
+We do not support floating point types, for which we would first need a
+reasonably complete formalization of the corresponding IEEE standard in Lean.
 
 \subsubsection{Structs and Enums}
 
@@ -228,6 +231,7 @@ definitions in Lean and do so using a naming scheme similar to \texttt{rustc}'s
 own internal representation.
 
 \subsubsection{Default Methods}
+\label{sec:default}
 
 As shown in \autoref{fig:trait}, we generate separate definitions for functions in trait
 implementations before assembling them into a type class instance. This way, and
@@ -351,6 +355,7 @@ arguments explicitly using the \lean{@} notation. We might be able to regain
 inference in a potential future version of Lean that supports functional dependencies~\cite{jones2000type}.
 
 \subsubsection{Trait Objects}
+\label{sec:traitobj}
 
 Lastly, Rust's trait system exhibits a feature that does not directly exist in
 Haskell. In Haskell, type classes are not types - they cannot explicitly be passed by
