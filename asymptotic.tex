@@ -10,18 +10,17 @@ property different from functional correctness: runtime complexity.
 
 \subsection{Classifying Asymptotic Complexity}
 
-Our formalization of multiparametric asymptotic function analysis is based on the technical
-report \emph{Formal Verification of Asymptotic Complexity Bounds
-for OCaml Programs}~\cite{gueneau}. The main insight of the report is that
+We start with a formalization of multiparametric asymptotic function analysis
+based on the ideas and the Coq implementation from~\cite{gueneau}. The main insight of the report is that
 we can elegantly formalize the notation of ``going to infinity'' for an
 arbitrary number of parameters using the mathematical concept of \emph{filters},
 originally from topology.
 
-We refer to the report for a detailed description on
+We refer to the report for a detailed description of
 filters. Fortunately for us, the Lean library already includes
 a definition of filters on sets. We will only need the filter \lean{at_infty} on
 natural numbers, the filter combinator \lean{prod_filter}, which we developed,
-as well as the ``eliminator'' \lean{eventually}.
+and the ``eliminator'' \lean{eventually}.
 
 \begin{minted}{lean}
 definition at_infty : filter ℕ := ...
@@ -37,80 +36,81 @@ A proposition such as \lean{eventually P [at ∞ × ∞]} then has the intuitive
 of holding iff there exists a pair of natural numbers such that \lean{P} holds
 for all (componentwise) larger pairs.
 
-We can now formalize the notions of a function being non-strictly and strictly
+We can now formalize the notions of a function (into the natural numbers) being non-strictly and strictly
 asymptotically bounded by another function, which directly lead to the usual
 notations as classes of functions.
 
 \begin{minted}{lean}
 namespace asymptotic
   parameters {A : Type} (F : filter A)
-  variables  (e f g : A → ℕ)
+  variables  (f g : A → ℕ)
 
-  protected definition le : Prop := ∃c, eventually {a | f a ≤ c * g a} F
-  protected definition lt : Prop := ∀c, eventually {a | c * f a ≤ g a} F
-  protected definition equiv : Prop := le f g ∧ le g f
+  definition le : Prop := ∃ c : ℕ, eventually {a | f a ≤ c * g a} F
+  -- bring `c` to the other side of the inequality
+  -- so that we can remain within integer arithmetics
+  definition lt : Prop := ∀ c : ℕ, eventually {a | c * f a ≤ g a} F
+  definition equiv : Prop := le f g ∧ le g f
 
   definition ub  := {f | le f g}
   definition sub := {f | lt f g}
   definition lb  := {f | le g f}
   definition slb := {f | lt g f}
-
-  notation `𝓞(` g `) ` F := ub F g
-  notation `𝓸(` g `) ` F := sub F g
-  notation `Ω(` g `) ` F := lb F g
-  notation `ω(` g `) ` F := slb F g
-  notation `Θ(` g `) ` F := equiv F g
 end asymptotic
+
+notation `𝓞(` g `) ` F := asymptotic.ub F g
+notation `𝓸(` g `) ` F := asymptotic.sub F g
+notation `Ω(` g `) ` F := asymptotic.lb F g
+notation `ω(` g `) ` F := asymptotic.slb F g
+notation `Θ(` g `) ` F := asymptotic.equiv F g
 \end{minted}
 
 With the notations in place, we can prove familiar lemmas about combining
-complexity bounds for arbitrary functions and filters, and about bounds for some
+complexity bounds for arbitrary functions and filters and lemmas about bounds for some
 specific functions and filters.
 
 \begin{minted}{lean}
-lemma ub_subset_ub (hf : f ∈ 𝓞(g) F) : 𝓞(f) F ⊆ 𝓞(g) F := ...
-lemma ub_add (h₁ : f₁ ∈ 𝓞(g) F) (h₂ : f₂ ∈ 𝓞(g) F) : f₁ + f₂ ∈ 𝓞(g) F := ...
-lemma ub_add_left (h : f ∈ 𝓞(g₂) F) : f ∈ 𝓞(g₁ + g₂) F := ...
-lemma ub_add_const (h : f₁ ∈ 𝓞(g) F ∩ Ω(λ x, k) F) :
+lemma ub_subset_ub : f ∈ 𝓞(g) F → 𝓞(f) F ⊆ 𝓞(g) F := ...
+lemma add_ub : f₁ ∈ 𝓞(g) F → f₂ ∈ 𝓞(g) F → f₁ + f₂ ∈ 𝓞(g) F := ...
+lemma ub_add_left : 𝓞(g₂) F ⊆ f ∈ 𝓞(g₁ + g₂) F := ...
+lemma ub_add_const : f₁ ∈ 𝓞(g) F ∩ Ω(λ x, k) F →
   f₁ + (λ x, k) ∈ 𝓞(g) F ∩ Ω(λ x, k) F := ..
-lemma ub_const : (λa, k) ∈ 𝓞(1) F := ...
-lemma ub_mul_prod_filter (h₁ : f₁ ∈ 𝓞(g₁) F₁) (h₂ : f₂ ∈ 𝓞(g₂) F₂) :
-  (λp, f₁ p.1 * f₂ p.2) ∈ 𝓞(λp, g₁ p.1 * g₂ p.2) (prod_filter F₁ F₂) := ...
-
+lemma const_ub_one : (λ x, k) ∈ 𝓞(1) F := ...
+lemma ub_mul_prod_filter : f₁ ∈ 𝓞(g₁) F₁ → f₂ ∈ 𝓞(g₂) F₂ →
+  (λ p, f₁ p.1 * f₂ p.2) ∈ 𝓞(λ p, g₁ p.1 * g₂ p.2) (prod_filter F₁ F₂) := ...
 
 lemma log_unbounded {b : ℕ} (H : b > 1) : log b ∈ ω(1) [at ∞] := ...
 lemma id_unbounded : id ∈ ω(1) [at ∞] := ...
 \end{minted}
 
-\subsection{Verifying the Asymptotic Complexity of \texttt{[T]::binary\_search}}
+\subsection{Verifying the Complexity of \texttt{[T]::binary\_search}}
 
 As described in \autoref{sec:sem}, our semantics monad contains a step counter
 that is incremented on each function call and loop iteration. Because only a
 constant number of instructions can be executed between any such two events for
 a given program, the step count of an execution is asymptotically equivalent to the instruction
-count, which is usually assumed to be asymptotically equivalent to the running time.
+count, which in turn is usually assumed to be asymptotically equivalent to the running time.
 
 We extend our existing correctness proof of \lean{binary_search} by introducing
 a new predicate that tests both the return value and the step count.
 
 \begin{minted}{lean}
-inductive sem.terminates_with_in {a : Type₁} (H : a → Prop) (max_cost : ℕ) : sem a → Prop :=
+inductive sem.terminates_with_in {A : Type₁} (H : A → Prop) (max_cost : ℕ) : sem A → Prop :=
 mk : Π {x k}, H x → k ≤ max_cost → sem.terminates_with_in H max_cost (some (x, k))
 \end{minted}
 
 Because we will only prove asymptotic upper bounds, we also use an upper bound
 in the definition in order to simplify reasoning about specific cost functions.
-If we wanted to use operators other than \lean{𝓞}, we should turn the inequality
+If we wanted to use the predicate with operators other than \lean{𝓞}, we should turn the inequality
 into an equality.
 
 This time we analyze the function bottom-up, starting with a single loop iteration, \ie
-a call of \lean{loop_4}. With all dependencies unfolded, we quickly obtain a
+an execution of \lean{loop_4}. With all dependencies unfolded, we quickly obtain a
 constant bound on the step count for everything except the trait call to
-\lean{Ord.cmp}, of whose complexity we have absolutely no information. In order
+\lean{Ord.cmp}, of whose complexity we have absolutely no information. If we wanted
 to obtain the textbook bound of $\mathcal{O}(\log n)$ for binary search, we would
 have to assume that comparing two elements takes only constant time. That is
 certainly not true for all implementations of the trait and such a
-restriction would be a shame since we did a general correctness proof for any
+restriction would be a shame since for the correctness theorem we did a general proof for any
 decidable linear order. Thus we instead introduce a more dynamic upper bound for
 the call: the maximum of all execution costs of such comparisons.
 
@@ -142,7 +142,7 @@ exists.intro (λ n, n + 15) ...
 This lemma says that the execution cost of \lean{loop_4} is linearly bound by
 the maximum comparison cost. In general, we have to separate the \emph{measure}
 function that reduces the input data to a natural number (here
-\lean{cmp_max_cost}) and the (abstract or specific) cost function that describes
+\lean{cmp_max_cost}) and the abstract cost function that describes
 the asymptotic behavior of the measure result, since we cannot define the latter
 on arbitrary domains. The composition of both then gives us the actual upper
 bound function.
@@ -152,7 +152,7 @@ measure depends on only after the existential quantifier. This makes the
 definitions slightly more verbose since we cannot use the convenient
 \lean{section} mechanisms with them any more.
 
-Going up, we expect the running time of the whole loop to be that of the body
+Going up to the whole loop, we expect its asymptotic running time to be that of the body
 multiplied with \lean{log₂ (length self)}. Formally, we again have to split the
 measure function \lean{length} from the asymptotic cost function \lean{log₂}.
 
@@ -165,7 +165,7 @@ lemma loop_loop_4.spec :
     (loop loop_4 (closure_5642.mk needle, 0, self)) := ...
 \end{minted}
 
-As with the functional correctness proof, we can show this lemma by well-founded
+As in the functional correctness proof, we can show this lemma by well-founded
 recursion. However, proving that a loop is asymptotically bounded by an
 iteration upper bound multiplied by an upper bound for the body should be a
 common occurence, so we have extracted the proof into a general theorem.
@@ -198,7 +198,7 @@ This may very well be the most complex theorem of our work, at least by
 signature. Going through the explicit parameters from top to bottom, we have the
 loop body, the precondition, the invariant (which may depend on both the initial
 and current state), the postcondition, the concrete and asymptotic bound and
-measure function of the iteration count and the same for the body. These are
+measure function of the iteration count, and the same for the body. These are
 followed by assumptions that the asymptotic bounds are correct, that the
 precondition implies the invariant, and that a loop iteration either continues
 the loop with the invariant upheld and the concrete iteration count reduced or
@@ -217,46 +217,43 @@ is the more interesting bound, we will show some more details of the proof.
 We choose the concrete bound \lean{λ n, log₂ (2 * n) + 1} for the iteration
 count and show that it is in \lean{𝓞(log₂) [at ∞]}. Because the underlying relation
 \lean{asymptotic.le} is transitive, we can make use of Lean's \lean{calc} blocks
-for this.
+for this. By a second transitivity lemma, we can even combine it with the
+standard (pointwise) function inequality operator.
 
 \begin{minted}{lean}
 local infix `≼`:25 := asymptotic.le [at ∞]
 ...
 
-calc (λ a, log₂ (2 * a) + 1)
-    ≼ (λ a, log₂ a + 2) : ub_of_eventually_le_at_infty 1 (
-      take a, suppose a ≥ 1,
-      calc log₂ (2 * a) + 1 = log₂ a + 1 + 1 : ...
-                        ... ≤ log₂ a + 2     : ...)
-... ≼ log₂ : ub_add asymptotic.le.refl (
-      calc (λ x, 2) ≼ (λ x, 1) : ub_const
+calc (λ n, log₂ (2 * n) + 1)
+    ≤ (λ n, log₂ n + 2) : ...
+... ≼ log₂ : add_ub asymptotic.le.refl (
+      calc (λ n, 2) ≼ (λ n, 1) : const_ub_one
                 ... ≼ log₂     : asymptotic.le_of_lt (log_unbounded ...))
 \end{minted}
 
-Finally, we show that the conrete iteration count is strictly decreasing. This
-follows from the premises \lean{length s' ≤ length s / 2} and \lean{length s ≠
-  0} of \lean{loop_4_step} from the correctness proof, together with the fact
+Finally, we show that the concrete iteration count is strictly decreasing. This
+follows from the premises \lean{length s' ≤ length s / 2} and \lean{length s ≠ 0} of \lean{loop_4_step} from the correctness proof, together with the fact
 that \lean{log₂} is monotone.
 
 \begin{minted}{lean}
 calc log₂ (2 * length s') + 1
-    ≤ log₂ (length s) + 1     : ...
-... = log₂ (2 * length s)     : ...
-... < log₂ (2 * length s) + 1 : le.refl
+    ≤ log₂ (length s) + 1     : ...`length s' ≤ length s / 2`...
+... = log₂ (2 * length s)     : ...`length s ≠ 0`...
+... < log₂ (2 * length s) + 1 : ...
 \end{minted}
 
-There is a single call going up from the loop to \lean{binary_search}, leaving
+Going up from the loop to \lean{binary_search}, there is just a single call, leaving
 the final asymptotic complexity unchanged.
 
 \begin{minted}{lean}
 theorem binary_search.spec :
   ∃ f ∈ 𝓞(λ p, log₂ p.1 * p.2) [at ∞ × ∞],
-  ∀(self : slice T) (needle : T), is_slice self → sorted le self → sem.terminates_with_in
+  ∀ (self : slice T) (needle : T), is_slice self → sorted le self → sem.terminates_with_in
     (binary_search_res self needle)
     (f (length self, Ord'.cmp_max_cost needle self))
     (binary_search self needle) := ...
 \end{minted}
 
-Thus, in the most general sense, the runtime of \lean{binary_search} is
+Thus, in the most general way, the runtime of \lean{binary_search} is
 asymptotically bounded by the logarithm of the input slice's length multiplied
 with the maximum cost of comparing the needle with any element in the slice.

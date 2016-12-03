@@ -40,11 +40,14 @@
 \newunicodechar{∘}{\freeserif{∘}}
 \newunicodechar{ₗ}{\freeserif{ₗ}}
 \newunicodechar{∪}{\freeserif{∪}}
+\newunicodechar{𝓸}{\freeserif{𝓸}}
+\newunicodechar{⊆}{\freeserif{⊆}}
+\newunicodechar{≼}{\freeserif{≼}}
 
 \usepackage{fancyhdr}
 \setlength{\headheight}{15pt}
 \usepackage{todonotes, rotating}
-\usepackage[draft]{minted}
+\usepackage{minted}
 %workaround to remove red boxes
 \renewcommand{\fcolorbox}[4][]{#4}
 \usemintedstyle{tango}
@@ -221,8 +224,7 @@ asymptotic runtimes.
 \newpage
 \input{evaluation}
 \newpage
-\section{Conclusion and Future Work}
-
+\input{conclusion}
 \newpage
 \bibliographystyle{abbrv}
 \bibliography{bib}
