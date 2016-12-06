@@ -40,7 +40,7 @@
 \newunicodechar{∘}{\freeserif{∘}}
 \newunicodechar{ₗ}{\freeserif{ₗ}}
 \newunicodechar{∪}{\freeserif{∪}}
-\newunicodechar{𝓸}{\freeserif{𝓸}}
+\newunicodechar{𝓸}{\ensuremath{o}}
 \newunicodechar{⊆}{\freeserif{⊆}}
 \newunicodechar{≼}{\freeserif{≼}}
 
@@ -161,22 +161,20 @@
 \renewcommand{\abstractname}{Einfache Verifikation von Rust-Programmen}
 \begin{abstract}
   Imperative Programmiersprachen sind in der modernen Softwareentwicklung
-  allgegenwärtig, stellen aber ein Hindernis für formale Softwareverifikation
-  dar durch ihre Verwendung von veränderbaren Variablen und Objekten. Programme
-  in diesen Sprachen können normalerweise nicht direkt auf die unveränderliche
+  allgegenwärtig, ihre Verwendung von veränderbaren Variablen und Objekten stellt aber ein Problem für formale Softwareverifikation dar. Programme in diesen Sprachen können normalerweise nicht direkt auf die unveränderliche
   Welt von Logik und Mathematik zurückgeführt werden, sondern müssen in eine
   explizit modellierte Semantik der jeweiligen Sprache eingebettet werden. Diese
-  Indirektion stellt ein Problem für die Benutzung von interaktiven
-  Theorembeweisern dar, da sie die Entwicklung von neuen Werkzeugen, Taktiken
+  Indirektion erschwert den Einsatz von interaktiven
+  Theorembeweisern, da sie die Entwicklung von neuen Werkzeugen, Taktiken
   und Logiken für diese ``innere'' Sprache bedingt.
 
   Die vorliegende Arbeit stellt einen Compiler von der imperativen
   Programmiersprache Rust in die pur funktionale Sprache des Theorembeweisers
-  Lean vor, der nicht nur generell das erste Werkzeug zur Verifikation von Rust-Programmen
-  darstellt, sondern diese insbesondere auch
+  Lean vor, der nicht nur generell das erste allgemeine Werkzeug zur Verifikation von Rust-Programmen
+  darstellt, sondern dies insbesondere auch
   mithilfe der von Lean bereitgestellten Standardwerkzeugen und -logik
   ermöglicht. Diese Transformation ist nur möglich durch spezielle Eigenschaften
-  von allen validen Rust-Programmen, die die Veränderbarkeit von Werten auf
+  von (der ``sicheren'' Teilsprache von) Rust, die die Veränderbarkeit von Werten auf
   begrenzte Geltungsbereiche einschränken und statisch durch Rusts Typsystem
   garantiert werden. Die Arbeit demonstriert den Einsatz des Compilers anhand
   der Verifikation von Realbeispielen und zeigt die Erweiterbarkeit des Projekts
@@ -227,6 +225,7 @@ asymptotic runtimes.
 \input{conclusion}
 \newpage
 \pagestyle{empty}
+\addcontentsline{toc}{section}{Acknowledgements}
 \section*{Acknowledgements}
 
 This thesis was written during a stay at Carneggie Mellon University,
@@ -244,12 +243,13 @@ writing, sponsoring a visit to Microsoft Research, and last but not least for
 making me feel welcome from the start. His personal tour of the campus gave me a
 clear edge over other visitors when navigating CMU's maze of bridges. The
 welcome was complemented by the other members of the Lean user group as well as
-the staff of the Interactive Systems Lab. In particular, while it was not meant
-to be for long, sharing an office with Gabriel Ebner created a ridiculously
+the staff of the Interactive Systems Lab. In particular -- while it was not meant
+to be for long -- sharing an office with Gabriel Ebner created a ridiculously
 productive and fun work environment, with not a single lunch break wasted with
 not talking about how to contribute to making Lean even better.
 
 \newpage
+\addcontentsline{toc}{section}{References}
 \bibliographystyle{abbrv}
 \bibliography{bib}
 

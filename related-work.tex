@@ -1,7 +1,7 @@
 \section{Related Work}
 \label{sec:related}
 
-While this thesis presents the first verification tool for Rust programs, tools
+While this thesis presents the first general verification tool for Rust programs, tools
 for many other imperative languages have been developed before.
 
 The Why3 project~\cite{bobot2011why3} is notable for its generality. It provides
@@ -30,19 +30,19 @@ fn get_mut<T>(slice: &mut [T], index: usize) -> &mut T
 \end{minted}
 
 WhyML is also being used as an intermediate language for the verification of
-programs in Ada~\cite{guitton2011hi}, C~\cite{cuoq2012frama} and Java~\cite{filliatre2007krakatoa}.
+programs in Ada~\cite{guitton2011hi}, C~\cite{cuoq2012frama}, and Java~\cite{filliatre2007krakatoa}.
 For the latter two languages, aliasing is reintroduced by way of an explicit heap.
 
-The remarkable SeL4 project~\cite{klein2009sel4} delivers a full formal verification of an operating
+The remarkable SeL4 project~\cite{klein2009sel4} delivers a complete formal verification of an operating
 system microkernel by way of multiple levels of program verification and
 refinement steps. The C code that produces the final kernel binary is verified
 by embedding it into the theorem prover
 Isabelle/HOL~\cite{nipkow2002isabelle}, using a deep embedding for statements
 and a shallow one for expressions. The C memory model used allows type-unsafe
-operations by use of a byte-size heap, but as with Why3, higher-order functions are
-not supported. The AutoCorres~\cite{greenaway2012bridging, greenaway2014don}
-tool then transforms this representation into a shallow monadic embedding,
-dealing with the `uninteresting complexities of C'~\cite{greenaway2014don} on the
+operations by use of a byte-size heap, but as with WhyML, higher-order functions are
+not supported. The AutoCorres tool~\cite{greenaway2012bridging, greenaway2014don}
+then transforms this representation into a shallow monadic embedding,
+dealing with the ``uninteresting complexities of C''~\cite{greenaway2014don} on the
 way. The result is an abstracted representation that is quite similar to ours
 (and in fact inspired it in part, as we shall note below), but does not go the
 last mile of completely eliminating the heap where possible. Thus the user still
@@ -53,7 +53,7 @@ of Rust in any case.
 
 It should be noted that our work, like most verification projects based on
 either embedding or code extraction, relies on both
-an unverified compiler and an unverified embedding tool, effectively making both
+an unverified compiler and an unverified transformation tool, effectively making both
 part of the trusted computing base. SeL4 is a notable exception in this,
 providing (at lower optimization levels) a direct equivalence proof~\cite{sewell2013translation} between the
 produced kernel binary and the verified embedded code, thus completely removing
@@ -66,5 +66,13 @@ easily verifiable (by building on AutoCorres) and to
 compile down to efficient C code. As we shall see in \autoref{sec:rust}, the
 biggest differences between Wadler-style purely functional linear languages and Rust are the
 existence of mutable references as well as sophisticated interprocedural
-reference tracking in the latter. For example, the aforementioned \rust{get_mut}
-function can only be expressed as a higher-order function in Cogent, even in the immutable case.
+reference tracking in the latter. For example, an immutable version of the aforementioned \rust{get_mut}
+function can only be expressed as a higher-order function in Cogent.
+
+Finally, while arguably too specific to be called a general verification tool,
+we have recently been made aware of the
+Rustproof\url{https://github.com/Rust-Proof/rustproof} student project, which
+can be used to verify functions consisting of integer arithmetics, boolean
+expressions, assertions, and if expressions. The function specification is given
+as an annotation using Rust's attribute syntax, which is then processed by a
+verification condition generator and passed to the Z3 SMT solver~\cite{de2008z3}.

@@ -8,7 +8,7 @@ semantic details where needed in \autoref{sec:trans} and \autoref{sec:mutref}.
 \label{sec:rust}
 
 Rust~\cite{matsakis2014rust} is a modern, multi-paradigm systems programming language sponsored
-by Mozilla Research and developed as an open-source community effort. Rust is still a quite young language, with its first stable
+by Mozilla Research and developed in an open-source community effort. Rust is still a quite young language, with its first stable
 version having been released on May 15, 2015. The two biggest Rust projects as of
 this writing are the Servo\footnote{\url{https://github.com/servo/servo}}~\cite{anderson2016engineering} web browser engine and
 the Rust compiler \texttt{rustc}\footnote{\url{https://github.com/rust-lang/rust}} itself.
@@ -28,7 +28,7 @@ Finally, Rust also features a \emph{trait} system modeled after Haskell's type c
 \end{listing}
 
 Many features of Rust other than the syntax can be explained by Rust's desire to
-feature an ML-like abstraction level while still running as efficiently as C,
+feature an ML/Haskell-like abstraction level while still running as efficiently as C,
 even on resource-constrained systems that may not allow dynamic allocation at all.
 Most prominently, Rust uses manual memory management just like C and C++, but
 guarantees memory safety through its \emph{ownership} and
@@ -36,70 +36,73 @@ guarantees memory safety through its \emph{ownership} and
 everything-goes programming on the level of C, but which is usually reserved for
 implementing low-level primitives on which the \emph{safe} part of the language can
 then build. In general, safe Rust is (thought to be) a type-safe
-language like ML and unlike either C or C++. We focus on safe Rust in the
+language like ML and Haskell and unlike either of C or C++. We focus on safe Rust in the
 following and in our work in order to peruse these guarantees.
 
 Ownership describes the application of \emph{linear types} to memory management
 as proposed by Wadler~\cite{wadler1990linear}. The owner of a Rust object is the binding that is responsible for freeing the
-object's resources (by calling a method of the \texttt{Drop} trait), which
+object's resources (by calling a method of the \rust{Drop} trait), which
 generally happens at the end of the binding's scope.
 Because an object managing resources should only ever have one owner, types that implement
-\texttt{Drop} are linear types: A value may only be used once, at which point it is
+\rust{Drop} are linear types: A value may only be used once, at which point it is
 consumed and ownership is transferred to its new binding.\footnote{Technically,
   because leaking resources (\ie not consuming the object at all) is a safe operation in Rust, such types are merely
   \emph{affine}. However, the distinction is not relevant for our purposes.
-} In the following example, we extract an element from a \texttt{Vec} (a dynamically-sized array
-type that has to free heap space in its \texttt{Drop} implementation), after which we are not permitted to use the \texttt{Vec} again.
+} In the following example, we extract the first element from the tuple type
+\rust{(S, T)}, which is assumed to be linear when not given specific
+instantiations for \rust{S} and \rust{T}. After passing the tuple to the function,
+we are not permitted to use it again. 
 
 \begin{minted}{rust}
-fn get<T>(v: Vec<T>, idx: usize) -> T {
-    v[idx]
-    // v will be freed here
+fn first<S, T>((s, _): (S, T)) -> S {
+  s
 }
+...
 
-let v: Vec<u32> = vec![1];
-let x = get(v, 0);
-// get(v, 1); // error[E0382]: use of moved value: `v`
+let p: (S, T) = ...;
+let s = first(p);
+// let t = second(p); // error[E0382]: use of moved value: `p`
 \end{minted}
 
-One way to retain access to the \texttt{Vec} would be to also return it from the
-function, regaining ownership. However, since \texttt{T} in general is a linear
-type too, \texttt{get} would have to remove the indexed element before returning
-the \texttt{Vec}.
-
+In general, one way to retain access to a linear data structure would be to also
+return its remainder from the
+function, which in this specific case would simply give us the identity function.
 A much better alternative is to use \emph{references}, which provide standard
 pointer indirection. Because a reference does not take ownership of the pointee,
 creating it is also called \emph{borrowing}.
 
 \begin{minted}{rust}
-fn get<T>(v: &Vec<T>, idx: usize) -> &T {
-    &v[idx]
+fn first<S, T>(&(ref s, _): &(S, T)) -> &S {
+  s
 }
+...
 
-let v: Vec<u32> = vec![1];
-let x = get(&v, 0); // x: &u32
+let p: (S, T) = ...;
+let s: &S = first(&p);
+let t = second(&p);
 \end{minted}
 
-Here \rust{&T} represents an immutable reference to a value of type \rust{T}. Note that the compiler would stop us if we tried to return \texttt{v[idx]} by value:
+Here \rust{&(S, T)} represents an immutable reference to \rust{(S, T)}, which we
+destructure in the function header and then obtain a reference to the
+substructure via the \rust{ref} keyword. Note that the compiler would stop us if we tried to extract \texttt{s} by value:
 
 \begin{verbatim}
-error[E0507]: cannot move out of indexed content
+error[E0507]: cannot move out of borrowed content
 \end{verbatim}
 
-Still, coming from other languages with manual memory management, this might
+Still, coming from other languages with manual memory management, borrowing might
 look like a potentially unsafe thing to do: The function signature does not tell
-the callee that the returned reference is only valid as long as the
-\texttt{Vec}. Even Wadler tells us that a temporary reference to a linear value
+the callee that the returned reference is only valid as long as the tuple. Even Wadler tells us that a temporary reference to a linear value
 must be checked not to escape from the local scope. Indeed, it seems like the following program should produce a dangling pointer.
 
 \begin{minted}{rust}
 fn dangling() -> u32 {
-    let x = {
-        let v: Vec<u32> = vec![1];
-        get(&v, 0)
-        // v will be freed here
-    };
-    *x
+  let s: &u32 = {
+    let p: (u32, u32) = (0, 0);
+    first(&p)
+    // p will be (logically) freed here
+  };
+  *s
 }
 \end{minted}
 
@@ -107,69 +110,73 @@ However, the Rust compiler will stop us from doing this, printing an
 elaborate error message:
 
 \begin{minted}{text}
-error: `v` does not live long enough
-|
-|         get(&v, 0)
-|              ^ does not live long enough
-|     };
-|     - borrowed value only lives until here
-|     *x
+error: `p` does not live long enough
+|     first(&p)
+|            ^ does not live long enough
+|   };
+|   - borrowed value only lives until here
+|   *s
 | }
 | - borrowed value needs to live until here
 \end{minted}
 
-The compiler must have had some information about the relationship of \texttt{x}
-and \texttt{v} in order to deduce this without resorting to inter-procedural
-analysis. It turns out that the full signature of the \texttt{get} function is as follows:
+The compiler must have had some information about the relationship of \rust{p}
+and \rust{s} in order to deduce this without resorting to inter-procedural
+analysis. It turns out that the explicit signature of the \rust{first} function is as follows:
 
 \begin{minted}{rust}
-fn get<'a, T>(v: &'a Vec<T>, idx: usize) -> &'a T
+fn first<'a, S, T>(_: &'a (S, T)) -> &'a S
 \end{minted}
 
 \rust!'a! is called a \emph{formal lifetime parameter}. It
-specifies that the returned reference is indeed only valid as long as the first
+specifies that the returned reference is indeed valid only as long as the first
 argument. By integrating lifetimes into the type system like this, Rust can
-reason about references even when confronted with complex, inter-procedural, higher-order reference lifetime relations.
+reason about references even when confronted with complex, inter-procedural reference lifetime relations.
 
-While we have solved the dangling pointer problem for immutable data, mutability
+While we have avoided memory safety problems with immutable references, mutability
 as so often aggravates the problem.
 
 \begin{minted}{rust}
+fn reset(x: &mut Box<u32>) {
+  // replaces and frees the old pointee of `x`
+  *x = Box::new(0);
+}
+
 fn dangling2() -> u32 {
-    let mut v: Vec<u32> = vec![1];
-    let x = get(&v, 0);
-    // remove all elements from v
-    v.clear(); // shorthand for (&mut v).clear();
-    *x
-    // v will be freed here
+  let mut p: (Box<u32>, u32) = (Box::new(0), 0);
+  // 'reborrows' the inner value of the Box
+  let s: &u32 = &*first(&p);
+  reset(&mut p.0);
+  *s
 }
 \end{minted}
 
-By clearing the vector while we still hold a reference to its content, we should
-again produce a dangling pointer -- even though this time, \rust{v} indeed
-outlives \rust{x}. Fortunately, the Rust compiler will again stop us:
+\rust{Box} is a data type that manages a single heap-allocated value. By
+replacing the first \rust{Box} instance with a new one via a mutable reference,
+\rust{s} should again be a dangling pointer -- even though this time, \rust{p} itself
+outlives \rust{s}. Fortunately, the Rust compiler will again stop us:
 
 \begin{minted}{text}
-error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable
+error[E0502]: cannot borrow `p.0` as mutable because `p` is also borrowed as immutable
 |
-|     let x = get(&v, 0);
-|                  - immutable borrow occurs here
-|     // remove all elements from v
-|     v.clear(); // shorthand for (&mut v).clear();
-|     ^ mutable borrow occurs here
-|     *x
+|   let s: &u32 = &*first(&p);
+|                          - immutable borrow occurs here
+|   reset(&mut p.0);
+|              ^^^ mutable borrow occurs here
+|   *s
 | }
 | - immutable borrow ends here
 \end{minted}
 
 We have finally arrived at the aliasing problem: In a language with manual
-memory management, we can create type unsafety through the mere existence of two
-pointers, at least one of them mutable, to the same datum. Thus, Rust detects
-and forbids any occurrences of mutable aliasing, as shown above.
+memory management, we can create unsafety through the mere existence of two
+references, at least one of them mutable, that allow access to the same
+datum at the same time. Thus, Rust detects
+and forbids occurrences of mutable aliasing, as shown above.
 
 %The beauty of Rust's solution to safe managed memory management is that the absence of mutable aliasing solves
 The beauty of forbidding mutable aliasing is that it solves many sources of bugs
-in imperative programs even outside of managed memory management. Indeed, as
+in imperative programs even outside of manual memory management. In fact, as
 Wadler notes, it makes mutable references safe even in a referentially
 transparent language: ``In order for destructive updating of a value to be safe,
 it is essential that there be only one reference to the value when the update
@@ -177,24 +184,23 @@ occurs''~\cite{wadler1990linear}. While Rust does introduce APIs, such as for I/
 transparency, the absence of mutable aliasing still provides safety guarantees
 that are usually only attributed to purely functional languages, first and
 foremost among them the elimination of data races. By focusing on a subset of
-Rust and its APIs that is truly referentially transparent, we obtain a
+Rust and its APIs that is truly referentially transparent (but includes passing mutable references), we obtain a
 sufficiently narrow gap between Rust and the purely functional language Lean
 that our transformation between them becomes feasible.
 
 \subsection{Lean}
 
-The Lean~\cite{de2015lean} theorem prover is an open source, dependently typed,
+The Lean theorem prover~\cite{de2015lean} is an open source dependently typed,
 interactive theorem prover developed jointly at Microsoft Research and Carnegie
 Mellon University. The first official release of Lean was announced at CADE-25
-in August 2015, making it just a few months younger than Rust. As of this
-writing, development on Lean is focused on the next, unreleased version that
-will feature powerful automation written in Lean itself.
+in August 2015, making it just a few months younger than Rust.
+%As of this writing, development on Lean is focused on the next, unreleased version that will feature powerful automation written in Lean itself.
 
-Lean supports two different interpretations of Martin-Löf type theory:
-a purely constructive one based on Homotopy Type Theory, and one based on the
+The current version of Lean supports two different interpretations of Martin-Löf type theory:
+a purely constructive one based on Homotopy Type Theory~\cite{hottbook}, and one based on the
 Calculus of Inductive
 Constructions~\cite{coquand1988calculus,pfenning1989inductively} as championed
-by the Coq~\cite{barras1997coq} theorem prover, which supports both constructive
+by the Coq theorem prover~\cite{Coq:manual}, which supports both constructive
 and classical reasoning. We use the latter in our work.
 
 The primitive type in dependent type theory is the dependent function (or
@@ -234,7 +240,8 @@ inductive sum (A B : Type) : Type :=
 
 -- the dependent sum type
 inductive sigma (A : Type) (B : A → Type) : Type :=
-mk : Π(x : A), B x → sigma A B
+mk : Π (x : A), B x → sigma A B
+
 
 inductive bool : Type :=
 | ff : bool
@@ -243,6 +250,10 @@ inductive bool : Type :=
 inductive option (A : Type) : Type :=
 | none : option A
 | some : A → option A
+
+inductive list (T : Type) : Type :=
+| nil  : list T
+| cons : T → list T → list T
 
 inductive nat : Type :=
 | zero : nat
@@ -255,9 +266,9 @@ inductive nat : Type :=
 \end{listing}
 
 As we can see in \autoref{lst:ind}, inductive types themselves are instances of
-a type, namely \lean!Type!. This turns out to be a slight simplification,
-however. More specifically, Lean has a whole hierarchy of indexed types
-or \emph{universes} \lean!Type.{i}!, with \lean!Type.{i} :
+a type, namely \lean!Type!, though this turns out to be a slight syntactical simplification.
+More specifically, Lean has a whole hierarchy of indexed types
+or \emph{universes} \lean!Type.{i}!, where \lean!Type.{i} :
 Type.{i+1}!.\footnote{The hierarchy is, however, not cumulative: It is not true
   that \lean!Type.{i} : Type.{i+2}!.} The universe hierarchy is needed to avoid
 the type theoretic equivalent of Russell's paradox. When we write just
@@ -268,7 +279,7 @@ The reason for skipping \lean!Type.{0}! is that it has a special function that
 is suggested by its more common name, \lean!Prop!: It is the universe we normally
 declare types in that are to be interpreted as propositions.
 
-Under the Curry-Howard isomorphism, an objects of a type can be interpreted as
+Under the Curry-Howard correspondence, an object of a type can be interpreted as
 a proof of a proposition. The reason Lean uses a separate universe for this
 interpretation is that \lean!Prop! is given a specific property that would not
 make sense for the other universes: By \emph{proof irrelevance}, any two
@@ -277,6 +288,7 @@ proofs are irrelevant for computation. Finally, \lean!Prop! is also
 \emph{impredicative}: If \lean!B : Prop!, then also \lean!(Π x : A, B) : Prop!
 for any \lean!A!. This property ensures that predicates and universal
 quantifications are still propositions.
+
 The separation of inductive types and inductive propositions can lead to some duplication, which
 however turns out to be very useful in ensuring suggestive names and notations
 for each side (\autoref{tab:dataprop}).
@@ -339,7 +351,7 @@ in the constructor of the ubiquitous type \lean!eq! modeling Leibniz equality:
 
 \begin{minted}{lean}
 inductive eq {A : Type} (a : A) : A → Prop :=
-refl : eq a a -- explicit form: @eq A a a
+refl : eq a a -- explicit form: `@eq A a a`
 \end{minted}
 
 The binding mode \lean![x : A]! instructs Lean to infer \lean!x! by
@@ -379,4 +391,6 @@ end
 
 check f -- f : Π A : Type, A → A
 \end{minted}
-\todo{extend ad nauseam when needed}
+
+The \lean{namespace} \texttt{<prefix>} mechanism works like \lean{section}, but
+additionally prepends a namespace qualifier to each definition declared inside it.

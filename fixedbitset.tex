@@ -3,13 +3,13 @@
 
 Whereas our first case study focused on algorithmic verification, for our second
 study we chose the \rust{FixedBitSet} data structure from the \rust{fixedbitset}
-crate\footnote{https://docs.rs/fixedbitset/}. It can be thought of as
-a more efficient version of \rust{Vec<bool>} that stores elements packed at the bit
+crate.\footnote{https://docs.rs/fixedbitset/} It can be thought of as
+a more efficient version of a boolean array that stores elements packed at the bit
 level. While it is not a complex data structure, verifying it does require
 reasoning about the following important parts:
 
 \begin{itemize}
-  \item The ubiquitous \rust{Vec} type from the standard library, which
+  \item The ubiquitous \rust{Vec} type from the Rust standard library, which
     \rust{FixedBitSet} uses internally, including mutable references into it
   \item Data structure invariants
   \item Bitwise operations
@@ -33,7 +33,7 @@ We will focus on three basic operations: creating (\rust{with_capacity}),
 manipulating (\rust{insert}), and querying (\rust{contains}) a
 \rust{FixedBitSet}. The Rust implementations are shown in \autoref{lst:fixedbitset}.
 
-\begin{listing}[bt!]
+\begin{listing}[!bt]
 \begin{minted}{rust}
 const BITS: usize = 32;
 fn div_rem(x: usize, d: usize) -> (usize, usize) {
@@ -102,10 +102,7 @@ structure Vec (T : Type₁) :=
 
 We do lose information about the \rust{RawVec}'s length (also called the
 \rust{Vec}'s \emph{capacity}) here, but this information is not exposed by the
-\rust{Vec} operations \rust{FixedBitSet} depends on.
-
-All these operations are implemented using unsafe code, so we will have to
-axiomatize all of them too. \autoref{lst:vec} lists the Lean implementations of
+\rust{Vec} operations \rust{FixedBitSet} depends on. \autoref{lst:vec} lists the Lean implementations of
 the needed \rust{Vec} methods, none of which should be surprising.
 
 \begin{listing}[bt!]
@@ -161,8 +158,8 @@ return (⦃lens, get := return ∘ Vec.buf, set := λ old, return ∘ Vec.mk⦄,
 \end{minted}
 
 This trait implementation is being being used by \rust{FixedBitSet::insert} to
-access \rust{[T]::get_unchecked_mut}, which in turn returns a mutable reference to a slice
-element.
+access \rust{[T]::get_unchecked_mut}, which in turn returns a mutable reference
+to a single slice element.
 
 \begin{minted}{lean}
 definition «[T]».get_unchecked_mut {T : Type₁} (self : slice T) (index : usize) :
@@ -182,7 +179,7 @@ unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut T {
 
 There is also a safe, panicking variant called \rust{[T]::get_mut}, which we
 first mentioned in \autoref{sec:related} as not being expressible in other
-verifiable languages. Because our semantics monad does not differentiate between
+verifiable languages. Because our semantics monad does not currently differentiate between
 undefined behavior and panics, both functions become semantically equivalent in
 our transformation and we can translate calls to both of them, including the
 small bit of unsafe code in \rust{FixedBitSet::insert}.
@@ -209,8 +206,8 @@ may not necessarily be \rust{false}, as noted in the docstring for a different m
 
 \begin{minted}{rust}
 /// View the bitset as a mutable slice of `u32` blocks. Writing past the
-bitlength in the last block
-/// will cause `contains` to return potentially incorrect results for bits past the bitlength.
+/// bitlength in the last block will cause `contains` to return
+/// potentially incorrect results for bits past the bitlength.
 pub fn as_mut_slice(&mut self) -> &mut [u32]
 \end{minted}
 
@@ -222,9 +219,7 @@ standard Lean \lean{set} operations.
 \begin{minted}{lean}
 lemma insert.spec (s : FixedBitSet) (bit : usize) : bit < length s →
   sem.terminates_with
-    (λ ret,
-      let s' := ret.2 in
-      to_set s' = to_set s ∪ '{bit})
+    (λ ret, to_set ret.2 = to_set s ∪ '{bit})
     (insert s bit)
 \end{minted}
 
@@ -238,7 +233,7 @@ structure FixedBitSet' [class] (self : FixedBitSet) : Prop :=
 (length_eq : nat.div_ceil (length self) 32 = list.length (Vec.buf (data self)))
 \end{minted}
 
-This invariant should be fulfilled by the only constructor, \rust{with_capacity}.
+This invariant should be fulfilled by the constructor, \rust{with_capacity}.
 
 \begin{minted}{lean}
 lemma with_capacity_inv (bits : usize) [is_usize bits] :

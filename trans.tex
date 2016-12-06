@@ -9,7 +9,7 @@ Rust Reference.\footnote{\url{https://doc.rust-lang.org/reference.html}} Because
 our translation output is not optimized for readability, all sample translations
 in this section have been prettified manually without changing their semantics.
 An non-prettified feature-by-feature breakdown is also available
-online.\footnote{http://kha.github.io/electrolysis/}
+online.\footnote{\url{http://kha.github.io/electrolysis/}}
 
 \subsection{The MIR}
 \label{sec:mir}
@@ -36,10 +36,10 @@ online.\footnote{http://kha.github.io/electrolysis/}
   \label{fig:mir}
 \end{figure}
 
-Because Rust makes extensive use of inference algorithms for types, lifetimes and typeclasses,
+Because Rust makes extensive use of inference algorithms for types, lifetimes, and traits,
 correctly parsing Rust code is no small feat. Therefore, we use the Rust
-Compiler \texttt{rustc} itself as a frontend and work on the completely explicit and
-much simpler \emph{mid-level intermediate representation} (MIR)
+Compiler \texttt{rustc} itself as a frontend and work on the much more explicit and
+simple \emph{mid-level intermediate representation} (MIR)
 (\autoref{fig:mir}). By writing our translation program in Rust, we can import
 the \texttt{rustc} libraries to gain access to the MIR and many convenient
 helper functions.
@@ -84,7 +84,7 @@ according to the inter-crate dependencies. The user can additionally create a
 \verb!pre.lean! file that will automatically be imported and can be used for
 axiomatizations as well as a \verb!config.toml! file that can influence the
 translation (see below for examples). We use a third Lean file \verb!thy.lean! per crate
-for the proofs, which will import both the generated code and proof files from
+for the proofs, which will import both the generated code of the crate and proof files from
 other crates.
 
 \subsection{Types}
@@ -100,17 +100,17 @@ Lean's native arbitrary-sized types and instead handle overflow explicitly
 during computation (\autoref{sec:arith}).
 
 \begin{minted}{lean}
-abbreviation u8 [parsing_only] := nat
-abbreviation u16 [parsing_only] := nat
-abbreviation u32 [parsing_only] := nat
-abbreviation u64 [parsing_only] := nat
-abbreviation usize [parsing_only] := nat
+abbreviation u8 := nat
+abbreviation u16 := nat
+abbreviation u32 := nat
+abbreviation u64 := nat
+abbreviation usize := nat
 
-abbreviation i8 [parsing_only] := int
-// ...
+abbreviation i8 := int
+...
 
-definition u8.bits [reducible] : ℕ := 8
-// ...
+definition u8.bits : ℕ := 8
+...
 
 definition usize.bits : ℕ := 16
 lemma usize.bits_ge_16 : usize.bits ≥ 16 := dec_trivial
@@ -119,11 +119,12 @@ attribute usize.bits [irreducible]
 
 For the machine-size integer types \rust{usize} and \rust{isize}, we only expose
 the conservative assumption that their bit sizes are at least 16. We still define
-\rust{usize.bits} to be exactly 16 so that it is computable, but by then marking
-the definition as \rust{[irreducible]}, this fact is only accessible in proofs
+\lean{usize.bits} to be exactly 16 so that it is computable, but by then marking
+the definition as \lean{[irreducible]}, this fact is only accessible in proofs
 when explicitly unfolding the definition.
-When a proof does rely on the bounds of a parameter, we can add a separate
-hypothesis, for which we make use of typeclasses. The bounds of an expression
+
+When a proof does rely on the bounds of an integer parameter, we can add a separate
+hypothesis, for which we make use of type classes. The bounds of an expression
 can often be determined just from partial information, such as with unsigned division.
 
 \begin{minted}{lean}
@@ -135,19 +136,19 @@ lemma div_is_bounded_nat [instance] (bits x y : ℕ)
 \end{minted}
 
 We use the same approach for arrays (\rust{[T; N]}) and slices (\rust{&[T]}),
-mapping both the to arbitrary-length \lean{list} type. While Rust arrays have a
+mapping both to the arbitrary-length \lean{list} type. While Rust arrays have a
 constant length encoded in the type, slices are dynamic views into contiguous sequences
-like arrays or \rust{Vec}s and bounded only by the memory size. More
+like arrays and bounded only by the memory size. More
 specifically, they (and any Rust type) are assumed to be no larger than
 \rust{isize::MAX} bytes so that the pointer difference of any two elements can
 be represented by an \rust{isize} value.
 
 \begin{minted}{lean}
-abbreviation array [parsing_only] (A : Type₁) (n : ℕ) := list A
-abbreviation slice [parsing_only] := list
+abbreviation array (A : Type₁) (n : ℕ) := list A
+abbreviation slice := list
 
 definition is_slice [class] {A : Type₁} (xs : slice A) :=
-length xs < 2^(usize.bits-1)
+length xs < 2^(isize.bits-1)
 \end{minted}
 
 We do not support floating point types, for which we would first need a
@@ -173,10 +174,10 @@ We will discuss mutable references in \autoref{sec:mutref}.
 
 Rust's trait system is similar to Haskell's type classes, but borrows some
 syntax from more object-oriented \emph{interface} systems. In particular, in addition
-to functions a trait may also contain methods that can be called on any object
+to functions, a trait may also contain methods that can be called on any object
 of a type the trait is implemented \emph{on}. This is implemented via an implicit
 type parameter \rust{Self} that is used for the type of the \lean{self}
-parameter and is specified in the \rust{for} clause when implementing a trait via an \rust{impl} block.
+parameter and is specified in the \rust{for} clause when implementing the trait via an \rust{impl} block.
 
 \begin{figure}[bt]
 \begin{sbs1}
@@ -237,7 +238,7 @@ As shown in \autoref{fig:trait}, we generate separate definitions for functions 
 implementations before assembling them into a type class instance. This way, and
 by eliminating the type class indirection in calls to a statically known
 implementation, we can allow trait implementation functions to call each other
-using our standard topological dependency ordering.
+using our standard topological dependency ordering:
 
 \begin{sbs1}
 struct S;
@@ -274,26 +275,27 @@ definition «S as Trait» [instance] :=
 However, just like Haskell, Rust also allows default implementations of trait
 methods that may arbitrarily call and be called from other trait methods that
 will only be defined in some implementation of the trait later on. This
-makes static ordering of dependencies impossible.
+makes static ordering of dependencies impossible in general.
 
 In essence, a default method in a trait takes as input an instance of that trait
 to call other trait methods with, but at the same time has to be a slot in the
 very same trait because it may be overridden in an implementation.
 
 There are multiple potential ways to deal with that depdendency cycle. We could
-simply create a specialized copy of the trait method for each instantiation, but
-then we would also have to copy proofs about it. We could try to dynamically solve the cycle in a general way, computing its least fixed point
+simply create a specialized copy of the default method implementation for each instantiation, but
+then we could also only do specialized proofs about it instead of one
+instance independent proof. We could try to dynamically solve the cycle in a general way, computing its least fixed point
 by use of the Knaster-Tarski theorem~\cite{tarski1955lattice} as usual in
 denotational semantics. Or we can restrict ourselves to special cases that break
 the cycle. If we remove the trait instance as an input to the default method, it
 cannot call other trait methods. If, on the other hand, we do not make default
-methods part of the trait instance, it
+methods part of the trait, it
 cannot be overridden or be called from inside implementations of the trait. We
 could even mix these two approaches, incrementally building up the
 trait instance by alternating between default and non-default methods.
 
-We could implement all these approaches and automatically or manually choose
-between them on a case-by-case basis. It turns out, however, that in the Rust standard library, default methods are often just
+We could implement all of these approaches and automatically or manually choose
+between them on a case-by-case basis. It turns out, however, that at least in the Rust standard library, default methods are often just
 convenience wrappers around other trait methods, like in the \rust{PartialEq} trait.
 
 \begin{minted}{rust}
@@ -358,8 +360,8 @@ inference in a potential future version of Lean that supports functional depende
 \label{sec:traitobj}
 
 Lastly, Rust's trait system exhibits a feature that does not directly exist in
-Haskell. In Haskell, type classes are not types - they cannot explicitly be passed by
-value, only implicitly through inference. In Rust, traits are dynamically sized
+Haskell. In Haskell, type classes are not types - they cannot explicitly be passed as
+values, only implicitly through inference. In Rust, traits are dynamically sized
 types, which means they can be used as values, but only behind some indirection like
 \rust{&Trait}. These \emph{trait objects} are represented as a pointer to a
 vtable of the trait implementation and another pointer to the \emph{Self} value.
@@ -424,6 +426,15 @@ lemma return_bind {A B : Type₁} {a : A} {f : A → sem B}
 lemma bind_return {A : Type₁} {m : sem A} : (m >>= return) = m := ...
 lemma bind.assoc {A B C : Type₁} {m : sem A} {f : A → sem B}
   {g : B → sem C} : (m >>= f >>= g) = (m >>= (λx, f x >>= g)) := ...
+\end{minted}
+
+When reasoning about a function's behavior, we most often want to assert
+termination and a predicate on the return value.
+
+\begin{minted}{lean}
+definition sem.terminates_with {A : Type₁} (H : A → Prop) : sem A → Prop
+| none := false
+| (some (x, k)) := H x
 \end{minted}
 
 \subsection{Statements and Control Flow}
@@ -538,7 +549,7 @@ State → sem (State + Res)
 \end{minted}
 that takes a tuple \lean{State} of loop variables and either returns the new
 state for the next iteration, or a value of the source function's return type
-\lean{Res} when breaking out of the loop. We tie this into a single value of
+\lean{Res} when breaking out of the loop. We tie this function into a single value of
 type \lean{sem Res} by use of a general \emph{loop combinator}.
 
 \subsubsection{The Loop Combinator}
@@ -555,7 +566,7 @@ Its task is to apply \rust{body} repeatedly (starting with \rust{s}) until some
 (which \rust{body} may also return by itself). Termination for arbitrary values
 of \rust{body} obviously is not a decidable property. Therefore we will have to leave
 the constructive subset of Lean, as signified by the \lean{noncomputable}
-specifier. The (simplified) translation of the Rust code in \autoref{fig:scc} via
+specifier. The translation of the Rust code in \autoref{fig:scc} via
 \lean{loop} is as follows:
 
 \begin{minted}{lean}
@@ -581,14 +592,14 @@ inductively as all predecessors of the element under the relation being accessib
 
 \begin{minted}{lean}
 inductive acc {A : Type} (R : A → A → Prop) : A → Prop :=
-intro : ∀x, (∀ y, R y x → acc R y) → acc R x
+intro : ∀ x, (∀ y, R y x → acc R y) → acc R x
 
 inductive well_founded [class] {A : Type} (R : A → A → Prop) : Prop :=
 intro : (∀ a, acc R a) → well_founded R
 \end{minted}
 
 Using structural recursion over the \lean{acc} predicate, the standard library
-defines a fixed-point combinator for functionals respecting a well-founded
+defines a fixpoint combinator for functionals respecting a well-founded
 relation, and proves that the combinator satisfies the fixpoint equation.
 
 \begin{minted}{lean}
@@ -627,7 +638,7 @@ section
   | (inl s') (inl s) := R s' s
   | _        _       := false
 
-  private lemma R'.wf [instance] [well_founded R] : well_founded R' := ...
+  lemma R'.wf [instance] [well_founded R] : well_founded R' := ...
 \end{minted}
 
 We can then wrap \lean{body} in a functional respecting \lean{R'} that we can pass to \lean{well_founded.fix}.
@@ -653,7 +664,7 @@ We can then wrap \lean{body} in a functional respecting \lean{R'} that we can pa
 \end{minted}
 
 Finally, we implement \lean{loop} by choosing any well-founded relation \lean{R} that makes
-the loop terminate, if any, or else return \lean{mzero}.
+the loop terminate, if any, or else returning \lean{mzero}.
 
 \begin{minted}{lean}
   definition terminating (s : State) :=
@@ -696,21 +707,21 @@ theorem loop.fix_eq
 \end{minted}
 
 If the application of \lean{loop.fix} terminates, we can show that the original
-application \lean{loop} will do so too with the same return value,
+application of \lean{loop} will do so too with the same return value,
 via a helper lemma that says that all terminating \lean{loop.fix} applications are equal.
 
 \begin{minted}{lean}
 lemma loop.fix_eq_fix
   {R₁ R₂ : State → State → Prop} [well_founded R₁] [well_founded R₂]
   {s : State}
-  (Hterm₁ : loop.fix R₁ s ≠ mzero)
-  (Hterm₂ : loop.fix R₂ s ≠ mzero) :
+  (hterm₁ : loop.fix R₁ s ≠ mzero)
+  (hterm₂ : loop.fix R₂ s ≠ mzero) :
   loop.fix R₁ s = loop.fix R₂ s := ...
 
 theorem loop.fix_eq_loop
   {R : State → State → Prop} [well_founded R]
   {s : State}
-  (Hterm : loop.fix R s ≠ mzero) :
+  (hterm : loop.fix R s ≠ mzero) :
   loop.fix R s = loop s := ...
 \end{minted}
 
@@ -722,13 +733,13 @@ theorem loop.fix_eq_loop
 Rust's arithmetic semantics is based on the premise that in most circumstances,
 arithmetic overflow is unintended by the programmer,\footnote{When overflowing
   is indeed intended, the programmer may use special methods such as
-  \rust{u8::wrapping_add}} and constitutes a bug in
+  \rust{u8::wrapping_add}.} and constitutes a bug in
 the program. Therefore, in debug builds, the built-in arithmetic operators will
 panic on any overflow. In release builds, overflows for both signed and unsigned
 types will wrap for performance reasons.
 
 We thus regard arithmetic overflow in those operators as \emph{unspecified} and
-return the bottom value in such cases, using the predicate
+return the bottom value \lean{mzero} in such cases, using the predicate
 \lean{is_bounded_nat} from \autoref{sec:prim}.
 
 \begin{minted}{lean}
@@ -770,8 +781,8 @@ definition bitor bits := binary_bitwise_op bits bitvec.or
 ...
 \end{minted}
 
-Some care must be taken when implementing bitwise shift: Shifting by the bitsize
-of a type or more bits will panic in Rust.
+Some care must be taken when implementing bitwise shift: Shifting by a type's bitsize
+or more bits has the same unspecified behavior in Rust as overflows.
 
 \begin{minted}{lean}
 definition checked.shl [reducible] (bits : ℕ) (x : nat) (y : u32) : sem nat :=
@@ -783,14 +794,23 @@ sem.guard (y < bits)
 
 While indexing is desugared to a call to the \rust{Index} trait for most types,
 it is a primitive operation on arrays. Out-of-bounds accesses will panic in
-Rust. By identifying arrays with Lean lists, we can use the existing
-\lean{list.nth} function and \emph{lifting} its result into the semantics monad.
+Rust (in any build configuration). By identifying arrays with Lean lists (\autoref{sec:prim}), we can use the existing
+\lean{list.nth} function and \emph{lift} its result into the semantics monad.
 
 \begin{minted}{lean}
 definition sem.lift_opt {A : Type₁} : option A → sem A
-| none   := mzero
-| some a := return 
+| none     := mzero
+| (some a) := return a
 \end{minted}
+ 
+\begin{sbs1}
+let y = x[i];
+...
+\end{sbs1}
+\begin{sbs2}
+do y ← sem.lift_opt (list.nth x i);
+...
+\end{sbs2}
 
 \subsubsection{Lambda Expressions}
 \label{sec:lambda}

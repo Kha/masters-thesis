@@ -3,7 +3,7 @@
 
 As the previous section showed, the basic transformation already allows us to reason about mutability in
 form of local variables, including inside loops. The next step is to support
-non-local or indirect mutability in form of mutable references. We will develop
+indirect mutability in form of mutable references. We will develop
 a restricted but extendable transformation of mutable references in this section
 and put it to use in the next section.
 
@@ -68,7 +68,7 @@ definition lens.comp {A B C : Type₁} (l₂ : lens B C) (l₁ : lens A B) : len
 infixr ` ∘ₗ `:60 := lens.comp
 \end{minted}
 
-With this, we can translate the \rust{&mut x} operation: We generate a lens per
+We can now translate the \rust{&mut x} operation: We generate a lens per
 projection, then compose them together to obtain a value of type \lean{lens A B}
 where \lean{B} is the type of \lean{x}, and \lean{A} the type of the root variable of
 \lean{x}. For the projection of indexing into an array or slice we can give a generic
@@ -84,7 +84,7 @@ definition lens.index (Inner : Type₁) (index : ℕ) : lens (slice Inner) Inner
 
 There is one projection we have to special case: dereferencing an lvalue as in
 \rust{*x}. If \rust{x} is an immutable reference, this is just the identity lens
-because \rust{&T} and \rust{T} are translated to the same type. If it is a
+because \rust{&T} and \rust{T} are translated to the same type (\autoref{sec:refs}). If it is a
 mutable reference, we compose with its lens to obtain a lens on the ultimate
 root variable. This combination of referencing and dereferencing is also known as ``reborrowing''.
 
@@ -129,7 +129,7 @@ the following limitations:
 \begin{itemize}
 \item Mutable references can only be stored directly in variables, not nested in
   some structure. This also means that we do not have to worry about how to
-  represent mutable references in data types, yet.
+  represent mutable references in type declarations, yet.
 \item Whereas a completely static mapping works for linear code, it cannot work
   for variables that are part of a loop state in general. We could lift this
   restriction for the most common special case where the loop changes the lens,
@@ -142,11 +142,12 @@ the following limitations:
 In \autoref{sec:rust}, we introduced references as a more ergonomic (and
 efficient) way of passing ownership of a value to some function and getting back the
 old or (in the case of mutable references) new value from the function. While we
-do not have to worry about ownership in Lean, we can still invert this pattern
+do not have to worry about ownership in Lean, we can still use the reverse pattern
 for passing mutable references in Lean. For each mutable reference argument, we
 read the current value through the lens, pass it to the function, get back the new
 value as part of the return value, and write it back through the lens. Inside
-the called function, we immediately re-wrap the value in the identity lens.
+the called function, we immediately re-wrap the value in the identity lens. This
+is only correct because of the absence of mutable aliasing.
 
 \begin{sbs1}
 fn f(x: &mut T) -> R {...}

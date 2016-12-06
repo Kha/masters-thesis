@@ -10,17 +10,17 @@ of mutability is only exacerbated for languages that allow references to
 The standard way of verifying programs in such languages with the help of an
 interactive theorem prover is to explicitly model the semantics of the language
 in the language of the theorem prover, then translate
-the program to this representation (a ``deep'' embedding) and finally prove the
+the program to this representation (a ``deep'' embedding), and finally prove the
 correctness of its formalized behavior. This general approach is very flexible
 and allows for the verification of meta programs such as program transformations.
 The downside of the approach is that the theorem prover's tools and tactics may
 not be directly applicable to the embedded language, defeating many amenities of
 modern theorem provers.
 Alternatively, programs can be ``shallowly'' embedded by directly translating them
-into terms in the theorem prover's language without the use of an explicit inner semantics.
+into terms in the theorem prover's own language without the use of an explicit inner semantics.
 This simplifies many semantic details such as the identification and
 substitution of bound variables, but it is harder to accomplish the more the semantics
-of the source language differs from the theorem prover's own semantics.
+of the source language differs from that of the theorem prover.
 
 Regardless of the type of embedding,
 an explicit heap that references can point into must generally be modeled and
@@ -28,13 +28,13 @@ passed around in order to deal with the aliasing problem. References in this mod
 indices into a uniform heap, but various logics such as separation logic~\cite{reynolds2002separation} have been developed to work on a more abstract representation and to express
 aliasing-free sets of references.
 
-Languages with more restricted forms of aliasing exist, however.
+Languages with more restricted forms of aliasing do exist, however.
 Rust~\cite{matsakis2014rust}, a new, imperative systems programming language,
 imposes on mutable references the restriction of never being aliased by any
 other reference, mutable or immutable. This restriction eliminates the
 possibility of data races and other common bugs created by the presence of
-mutable sharing such as iterator invalidation. It furthermore enables more
-aggressive optimizations.
+mutable sharing such as iterator invalidation. It furthermore enables a memory-safe
+version of manual memory management and more aggressive optimizations.
 
 While the full Rust language also provides raw pointers, which are not bound by
 the aliasing restriction, and other ``unsafe'' operations, a
@@ -52,7 +52,10 @@ flexibility in modeling additional effects such as function runtime.
 We first discuss the simpler cases of the
 translation, notably excluding mutable references, in \autoref{sec:trans}. We
 show their application by giving a formal verification of Rust's
-\verb![T]::binary_search! method in \autoref{sec:binary_search}.
+\rust{[T]::binary_search} method in \autoref{sec:binary_search}.
 \autoref{sec:mutref} discusses the translation of most usages of mutable
 references, which is used in \autoref{sec:fixedbitset} for a partial verification of the
-\texttt{fixedbitset} crate.
+\texttt{FixedBitSet} data structure. We develop a Lean library for asymptotic analysis in
+\autoref{sec:asymptotic} and use it to verify the asymptotic runtime of
+\rust{[T]::binary_search}. Lastly, we present some
+empirical data about our coverage of the Rust language via its standard library in \autoref{sec:eval}.

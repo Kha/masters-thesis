@@ -32,7 +32,7 @@ impl<T> [T] {
 }
 \end{minted}
 
-As we can see from the its documentation and signature, the method
+As we can see from its documentation and signature, the method
 is very general: It works on all slices whose element type implements the
 \rust{Ord} trait, and it returns information in both the success and the failure
 case. The implementation, however, turns out to be merely a redirection to a
@@ -66,12 +66,27 @@ This indirection seems pointless at first, but follows from a technical
 restriction: There may be at most one \rust{impl} block for a primitive type
 like \rust{[T]}. Because the \rust{core} crate does not depend on the existence
 of a heap allocator, but some methods on \rust{[T]} like its merge sort
-implementation do need dynamic allocation, the \rust{impl} block is only
-declared in the later \rust{collections} crate. Since \rust{binary_search} does
+implementation do need dynamic allocation, the \rust{impl} block is
+declared only in the later \rust{collections} crate. Since \rust{binary_search} does
 not need an allocator, it should still reside in \rust{core}, and instead is
 associated to the slice type via the helper trait.
 
-\begin{listing}[!bt]
+This final version of \rust{binary_search}, which we represent as
+\rust{core::<[T] as SliceExt>::binary_search}, is implemented by way of a more
+general method \rust{binary_search_by} that takes a comparison function instead
+of being constrained to \rust{Ord} (\autoref{lst:binary_search_by}). This
+method, finally, turns out to be much more abstract than one might expect: Instead of
+the standard binary search implementation that iteratively reduces the search range via two
+indices, the range is represented as a subslice and manipulated via high-level
+slice methods such as \rust{split_at}. The reasoning behind this is a great show
+case for Rust's zero-cost (or even negative-cost, in this case) abstractions
+philosophy -- the abstract implementation actually surpasses a direct
+implementation in terms of efficiency because it helps the compiler eliminate
+all bounds checks in it. It also elegantly avoids the common
+pitfall\footnote{https://research.googleblog.com/2006/06/extra-extra-read-all-about-it-nearly.html}
+of a potential integer overflow in less abstract code like \rust{mid = (low + high) / 2}.
+
+\begin{listing}[bp]
 \begin{minted}{rust}
 fn binary_search_by<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
     where F: FnMut(&'a T) -> Ordering
@@ -99,24 +114,9 @@ fn binary_search_by<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
 \caption{Implementation of the \rust{binary_search_by} method. A subslice
   \rust{s} of \rust{self} is iteratively bisected until it is empty or the
   element has been found. The \rust{tail[1..]} \emph{slicing syntax} is
-  syntax sugar for \rust{tail.index(RangeFrom{start: 1})}.}
+  syntax sugar for \rust{tail.index(RangeFrom{start:1})}.}
 \label{lst:binary_search_by}
 \end{listing}
-
-This final version of \rust{binary_search}, which we represent as
-\rust{core::<[T] as SliceExt>::binary_search}, is implemented by way of a more
-general method \rust{binary_search_by} that takes a comparison function instead
-of being constrained to \rust{Ord} (\autoref{lst:binary_search_by}). This
-method, finally, turns out to be much more abstract than one might expect: Instead of
-the standard binary search implementation that iteratively reduces the search range via two
-indices, the range is represented as a subslice and manipulated via high-level
-slice methods such as \rust{split_at}. The reasoning behind this is a great show
-case for Rust's zero-cost (or even negative-cost, in this case) abstractions
-philosophy -- the abstract implementation actually surpasses a direct
-implementation in terms of efficiency because it helps the compiler to eliminate
-all bounds checks in it. It also elegantly avoids the common
-pitfall\footnote{https://research.googleblog.com/2006/06/extra-extra-read-all-about-it-nearly.html}
-of a potential integer overflow in less abstract code like \rust{mid = (low + high) / 2}.
 
 \newgeometry{bottom=1cm}
 \begin{sidewaysfigure}
@@ -128,7 +128,7 @@ of a potential integer overflow in less abstract code like \rust{mid = (low + hi
     \tikz[baseline=-0.3em]\node[draw, shape=rectangle] {types};,
     \tikz[baseline=-0.3em]\node[draw, shape=diamond, aspect=2] {traits};,
     and \tikz[baseline=-0.3em]\node[draw, shape=trapezium] {trait
-      implementations};. Axiomatized items that use unsafe code in the original
+      implementations};. Axiomatized definitions that use unsafe code in the original
     implementation are marked by dashed borders. Because
     we eagerly resolve trait method calls where possible, such as to the
     \rust{index} method of \rust{Index<RangeFrom<usize>>} for \rust{[T]}, we can
@@ -149,7 +149,7 @@ default methods, higher-order functions, and loops.
 \subsection{Prelude: Coping with Unsafe Dependencies}
 
 When trying to translate the \rust{binary_search} method including its
-dependencies, we will not get back a working definition at first. Our tool
+dependencies, we will not get back a definition at first. Our tool
 refuses to translate some dependencies because they use unsafe code, as marked
 in \autoref{fig:deps}. We will have to translate these functions manually,
 basically adding the correctness of their translation as axioms to the project.
@@ -176,7 +176,7 @@ sem.guard (Range.start index ≤ Range.«end» index ∧ Range.«end» index ≤
 The latter method presents a
 small technical hurdle: It is dependent on other translation products,
 specifically the \lean{Range} structure. Instead of having to axiomatize that
-perfectly translatable item and adding both definitions manually to the
+perfectly translatable definition too and adding both definitions manually to the
 \verb!pre.lean! file, we instruct the translator in the \verb!config.toml! file to inject our
 Lean definition of \rust{index} as the translation of the Rust definition on-the-fly.
 
@@ -191,7 +191,8 @@ Going back to the original definition of \rust{[T]::binary_search}, we translate
 the documented behavior into a Lean predicate.
 
 \begin{minted}{lean}
-parameters {T : Type₁} [Ord T]
+parameter {T : Type₁}
+hypothesis [Ord T] -- a synonym for `parameter`
 parameter self : slice T
 parameter needle : T -- a more descriptive name for the parameter `x`
 
@@ -206,21 +207,21 @@ shines: We can freely mix and match Rust types and standard Lean functions and
 constructs. In fact, we will have to do some more mixing of these two worlds to make
 the definition valid: While we have copied the assumption \rust{T : Ord} from
 the \rust{binary_search} method, the \lean{sorted} predicate expects T to
-implement Lean's own ordering typeclass. We therefore introduce a new typeclass
-\lean{Ord'} that merges both typeclasses -- or rather, in the Lean case, the
+implement Lean's own ordering type class. We therefore introduce a new type class
+\lean{Ord'} that brings both type classes together -- or rather, in the Lean case, the
 subclass of decidable, linear orders.
 
 \begin{minted}{lean}
-definition ordering {T : Type} [decidable_linear_order T] (x y : T) : cmp.Ordering :=
+definition ordering {T : Type₁} [decidable_linear_order T] (x y : T) : cmp.Ordering :=
 if x < y then Ordering.Less
 else if x = y then Ordering.Equal
 else Ordering.Greater
 
 structure Ord' [class] (T : Type₁) extends Ord T, decidable_linear_order T :=
-(cmp_eq : ∀ x y : T, Σ k, cmp x y = some (ordering x y, k))
+(cmp_eq : ∀ x y : T, Σ k, Ord.cmp x y = some (ordering x y, k))
 \end{minted}
 
-After changing the \lean{parameter} definition to \lean{Ord' T}, the
+After changing the \lean{hypothesis} to \lean{[Ord' T]}, the
 specification typechecks. We need two more (sensible) hypotheses before we can
 prove that \lean{binary_search} upholds the specification.
 
@@ -268,7 +269,7 @@ definition R := measure (λ st : loop_4.state, length st.2)
   (loop.fix loop_4 R (f₀, 0, self))
 \end{minted}
 
-\lean{measure} lets us create a well-founded relation on the loop state triple
+The \lean{measure} function lets us create a well-founded relation on the loop state triple
 by comparing the length of \lean{s}. We will not be able to show the new goal
 directly via well-founded induction over \lean{R}, instead we first have to
 generalize it. For that we first declare the loop invariants (which we obtained by
@@ -278,7 +279,7 @@ the non-sophisticated method of repeated try-and-error).
 variables (base : usize) (s : slice T)
 
 structure loop_4_invar :=
-(s_in_self  : s ⊑ₚ (dropn base self))
+(s_in_self  : s ⊑ₚ dropn base self)
 (insert_pos : sorted.insert_pos self needle ∈ '[base, base + length s])
 (needle_mem : needle ∈ self → needle ∈ s)
 \end{minted}
@@ -332,7 +333,7 @@ least halved. Together with the information that \lean{length s ≠ 0}, this
 implies \lean{length s' < length s} and ensures we can apply the induction
 hypothesis. We will
 need the former two stronger statements for proving the function's logarithmic
-complexity below.
+complexity in \autoref{sec:asymptotic}.
 
 The remainder of the proof, while tedious, uses mostly basic reasoning. We split
 the goal according to the \rust{if} and \rust{match} branches in the original

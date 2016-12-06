@@ -2,11 +2,11 @@
 \label{sec:eval}
 
 During our verification work, we always focused on supporting just enough of the vast Rust
-language as needed and instructed the translation tool to only translate the
-relevant definitions. Still, in order to give a more representative picture of
+language as needed to successfully translate the definitions at hand and
+instructed the translation tool to ignore other definitions. Still, in order to give a more representative picture of
 our coverage of the language, we also had the tool translate as many definitions
 from the \verb!core! crate as possible. This was followed by many iterations of
-fixing edges cases in the translation where it produced invalid Lean code, which
+fixing edge cases in the translation where it produced invalid Lean code, which
 overall resulted in a much more robust implementation.
 
 The end result is a single file of 75694 lines of valid Lean code, which
