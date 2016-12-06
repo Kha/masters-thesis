@@ -21,6 +21,12 @@ into terms in the theorem prover's own language without the use of an explicit i
 This simplifies many semantic details such as the identification and
 substitution of bound variables, but it is harder to accomplish the more the semantics
 of the source language differs from that of the theorem prover.
+Finally, if a function's specification is given directly in the code using some
+sort of annotation, a \emph{verification condition generator} can directly
+export the proof obligation as a formula instead of as another program. However,
+inserting and maintaining the annotations for a preexisting project may be
+troublesome and the specification language is often severely limited because the
+verification condition generator has to parse and analyze specifications.
 
 Regardless of the type of embedding,
 an explicit heap that references can point into must generally be modeled and

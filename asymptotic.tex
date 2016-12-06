@@ -26,10 +26,12 @@ and the ``eliminator'' \lean{eventually}.
 definition at_infty : filter ℕ := ...
 notation `[at ` `∞]`  := at_infty
 
-definition prod_filter {A B : Type} (Fa : filter A) (Fb : filter B) : filter (A × B) := ...
+definition prod_filter {A B : Type} (Fa : filter A) (Fb : filter B) :
+  filter (A × B) := ...
 notation `[at ` `∞` ` × ` `∞]` := prod_filter [at ∞] [at ∞]
 
-definition eventually {A : Type} (P : A → Prop) (F : filter A) : Prop := ...
+definition eventually {A : Type} (P : A → Prop) (F : filter A) : Prop :=
+...
 \end{minted}
 
 A proposition such as \lean{eventually P [at ∞ × ∞]} then has the intuitive meaning
@@ -40,7 +42,7 @@ We can now formalize the notions of a function (into the natural numbers) being 
 asymptotically bounded by another function, which directly lead to the usual
 notations as classes of functions.
 
-\begin{minted}{lean}
+\begin{minted}[samepage]{lean}
 namespace asymptotic
   parameters {A : Type} (F : filter A)
   variables  (f g : A → ℕ)
@@ -76,7 +78,8 @@ lemma ub_add_const : f₁ ∈ 𝓞(g) F ∩ Ω(λ x, k) F →
   f₁ + (λ x, k) ∈ 𝓞(g) F ∩ Ω(λ x, k) F := ..
 lemma const_ub_one : (λ x, k) ∈ 𝓞(1) F := ...
 lemma ub_mul_prod_filter : f₁ ∈ 𝓞(g₁) F₁ → f₂ ∈ 𝓞(g₂) F₂ →
-  (λ p, f₁ p.1 * f₂ p.2) ∈ 𝓞(λ p, g₁ p.1 * g₂ p.2) (prod_filter F₁ F₂) := ...
+  (λ p, f₁ p.1 * f₂ p.2) ∈ 𝓞(λ p, g₁ p.1 * g₂ p.2) (prod_filter F₁ F₂) :=
+...
 
 lemma log_unbounded {b : ℕ} (H : b > 1) : log b ∈ ω(1) [at ∞] := ...
 lemma id_unbounded : id ∈ ω(1) [at ∞] := ...
@@ -94,8 +97,10 @@ We extend our existing correctness proof of \lean{binary_search} by introducing
 a new predicate that tests both the return value and the step count.
 
 \begin{minted}{lean}
-inductive sem.terminates_with_in {A : Type₁} (H : A → Prop) (max_cost : ℕ) : sem A → Prop :=
-mk : Π {x k}, H x → k ≤ max_cost → sem.terminates_with_in H max_cost (some (x, k))
+inductive sem.terminates_with_in {A : Type₁} (H : A → Prop) (max_cost : ℕ) :
+  sem A → Prop :=
+mk : Π {x k}, H x → k ≤ max_cost →
+  sem.terminates_with_in H max_cost (some (x, k))
 \end{minted}
 
 Because we will only prove asymptotic upper bounds, we also use an upper bound
@@ -116,7 +121,8 @@ the call: the maximum of all execution costs of such comparisons.
 
 \begin{minted}{lean}
 -- recall our extension of `Ord` from Section 5.3
-structure Ord' [class] (T : Type₁) extends Ord T, decidable_linear_order T :=
+structure Ord' [class] (T : Type₁)
+  extends Ord T, decidable_linear_order T :=
 (cmp_eq : ∀ x y : T, Σ k, cmp x y = some (ordering x y, k))
 
 definition Ord'.cmp_max_cost {T : Type₁} [Ord' T] (y : T) (xs : list T) :=
@@ -131,11 +137,12 @@ to an asymptotic bound.
 \begin{minted}{lean}
 lemma loop_4.spec :
   ∃ c ∈ 𝓞(id) [at ∞],
-  ∀ self needle s base, sorted le self → is_slice self → loop_4_invar self needle s base →
-  sem.terminates_with_in
-    (loop_4_res self needle s)
-    (c (Ord'.cmp_max_cost needle self))
-    (loop_4 (closure_5642.mk needle, base, s)) :=
+  ∀ self needle s base, sorted le self → is_slice self →
+    loop_4_invar self needle s base →
+    sem.terminates_with_in
+      (loop_4_res self needle s)
+      (c (Ord'.cmp_max_cost needle self))
+      (loop_4 (closure_5642.mk needle, base, s)) :=
 exists.intro (λ n, n + 15) ...
 \end{minted}
 
@@ -214,7 +221,7 @@ behavior of the body from the lemma \lean{loop_4.spec}. We are left to prove
 that the iteration count is asymptotically bounded by \lean{log₂}. Because this
 is the more interesting bound, we will show some more details of the proof.
 
-We choose the concrete bound \lean{λ n, log₂ (2 * n) + 1} for the iteration
+We choose the concrete bound \lean{λ n, log₂ (2*n)+1} for the iteration
 count and show that it is in \lean{𝓞(log₂) [at ∞]}. Because the underlying relation
 \lean{asymptotic.le} is transitive, we can make use of Lean's \lean{calc} blocks
 for this. By a second transitivity lemma, we can even combine it with the
@@ -232,7 +239,7 @@ calc (λ n, log₂ (2 * n) + 1)
 \end{minted}
 
 Finally, we show that the concrete iteration count is strictly decreasing. This
-follows from the premises \lean{length s' ≤ length s / 2} and \lean{length s ≠ 0} of \lean{loop_4_step} from the correctness proof, together with the fact
+follows from the two premises \lean{length s' ≤ length s / 2} and \lean{length s ≠ 0} of \lean{loop_4_step} from the correctness proof, together with the fact
 that \lean{log₂} is monotone.
 
 \begin{minted}{lean}
@@ -248,10 +255,11 @@ the final asymptotic complexity unchanged.
 \begin{minted}{lean}
 theorem binary_search.spec :
   ∃ f ∈ 𝓞(λ p, log₂ p.1 * p.2) [at ∞ × ∞],
-  ∀ (self : slice T) (needle : T), is_slice self → sorted le self → sem.terminates_with_in
-    (binary_search_res self needle)
-    (f (length self, Ord'.cmp_max_cost needle self))
-    (binary_search self needle) := ...
+  ∀ (self : slice T) (needle : T), is_slice self → sorted le self →
+    sem.terminates_with_in
+      (binary_search_res self needle)
+      (f (length self, Ord'.cmp_max_cost needle self))
+      (binary_search self needle) := ...
 \end{minted}
 
 Thus, in the most general way, the runtime of \lean{binary_search} is

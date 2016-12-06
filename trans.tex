@@ -208,13 +208,15 @@ structure S := (i : i32)
 structure Trait [class] (Self T : Type₁) :=
 (f : Self → sem T)
 
-definition «S as Trait<i32>».f (self : S) : sem i32 :=
+definition «S as Trait<i32>».f (self : S) :
+  sem i32 :=
 return (S.i self)
 
 definition «S as Trait<i32>» [instance] :=
 ⦃Trait S i32, f := «S as Trait<i32>».f⦄
 
-definition g {T : Type₁} [Trait T i32] (t : T) : sem i32 :=
+definition g {T} [Trait T i32] (t : T) :
+  sem i32 :=
 sem.incr 1 (Trait.f _ t)
 
 definition h : sem i32 :=
@@ -262,14 +264,17 @@ structure Trait [class] (Self : Type₁) :=
 (f : Self → sem unit)
 (g : Self → sem unit)
 
-definition «S as Trait».g (self : S) : sem unit :=
+definition «S as Trait».g (self : S) :
+  sem unit :=
 return unit.star
 
-definition «S as Trait».f (self : S) : sem unit :=
+definition «S as Trait».f (self : S) :
+  sem unit :=
 sem.incr 1 («S as Trait».g self)
 
 definition «S as Trait» [instance] :=
-⦃Trait S, f := «S as Trait».f, g := «S as Trait».g⦄
+⦃Trait S, f := «S as Trait».f,
+          g := «S as Trait».g⦄
 \end{sbs2}
 
 However, just like Haskell, Rust also allows default implementations of trait
@@ -298,7 +303,7 @@ We could implement all of these approaches and automatically or manually choose
 between them on a case-by-case basis. It turns out, however, that at least in the Rust standard library, default methods are often just
 convenience wrappers around other trait methods, like in the \rust{PartialEq} trait.
 
-\begin{minted}{rust}
+\begin{minted}[samepage]{rust}
 pub trait PartialEq<Rhs> {
   fn eq(&self, other: &Rhs) -> bool;
   fn ne(&self, other: &Rhs) -> bool { !self.eq(other) }
@@ -313,7 +318,8 @@ our verification work so far.
 structure PartialEq [class] (Self Rhs : Type₁) :=
 (eq : Self → Rhs → sem bool)
 
-definition PartialEq.ne {Self Rhs : Type₁} [PartialEq Self Rhs] (self : Self) (other : Rhs) : sem bool :=
+definition PartialEq.ne {Self Rhs : Type₁} [PartialEq Self Rhs]
+  (self : Self) (other : Rhs) : sem bool :=
 do t5 ← sem.incr 1 (PartialEq.eq self other);
 return (bool.bnot t5)
 \end{minted}
@@ -396,12 +402,12 @@ definition sem (A : Type₁) := option (A × ℕ)
 \end{minted}
 
 We provide the standard monadic operations on the type, including a
-\texttt{do}-notation. The model-specific operations are \lean{mzero}
+\texttt{do} notation. The model-specific operations are \lean{mzero}
 indicating abnormal termination/nontermination, and \lean{sem.incr}, which
 increments the step counter (if any). An increment of one is emitted around
 every Rust function call and before each loop iteration.
 
-\begin{minted}{lean}
+\begin{minted}[samepage]{lean}
 definition mzero {A : Type₁} : sem A := none
 definition return {A : Type₁} (x : A) : sem A := some (x, 0)
 
@@ -684,8 +690,10 @@ well-foundedness proof so that we can pass them to \lean{loop.fix}. The
 Hilbert's epsilon operator.
 
 \begin{minted}{lean}
-noncomputable definition classical.some {A : Type} {P : A → Prop} (H : ∃x, P x) : A := ...
-theorem classical.some_spec {A : Type} {P : A → Prop} (H : ∃x, P x) : P (some H) := ...
+noncomputable definition classical.some {A : Type} {P : A → Prop}
+  (H : ∃x, P x) : A := ...
+theorem classical.some_spec {A : Type} {P : A → Prop} (H : ∃x, P x) :
+  P (some H) := ...
 \end{minted}
 
 The use of \lean{classical.some} as well as the undecidable conditional
@@ -743,7 +751,8 @@ return the bottom value \lean{mzero} in such cases, using the predicate
 \lean{is_bounded_nat} from \autoref{sec:prim}.
 
 \begin{minted}{lean}
-definition sem.guard {a : Type₁} (p : Prop) [decidable p] (s : sem a) : sem a :=
+definition sem.guard {a : Type₁} (p : Prop) [decidable p] (s : sem a) :
+  sem a :=
 if p then s else mzero
 
 definition check_unsigned (bits : ℕ) (x : nat) : sem nat :=
@@ -773,8 +782,7 @@ from the \lean{bitvec} type, which we adapted from the Lean standard
 library and expanded significantly.
 
 \begin{minted}{lean}
-abbreviation binary_bitwise_op (bits : ℕ) (op : bitvec bits → bitvec bits → bitvec bits)
-  (a b : nat) : nat :=
+abbreviation binary_bitwise_op (bits : ℕ) (op : bitvec bits → bitvec bits → bitvec bits) (a b : nat) : nat :=
 bitvec.to ℕ (op (bitvec.of bits a) (bitvec.of bits b))
 
 definition bitor bits := binary_bitwise_op bits bitvec.or
@@ -785,7 +793,8 @@ Some care must be taken when implementing bitwise shift: Shifting by a type's bi
 or more bits has the same unspecified behavior in Rust as overflows.
 
 \begin{minted}{lean}
-definition checked.shl [reducible] (bits : ℕ) (x : nat) (y : u32) : sem nat :=
+definition checked.shl [reducible] (bits : ℕ) (x : nat) (y : u32) :
+  sem nat :=
 sem.guard (y < bits)
   (return (bitvec.to ℕ (bitvec.shl (bitvec.of bits x) y)))
 \end{minted}

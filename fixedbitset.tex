@@ -115,7 +115,8 @@ namespace «Vec<T>»
 
   -- note: only a runtime upper bound
   definition push (self : Vec T) (value : T) : sem (unit × Vec T) :=
-  sem.incr (list.length (Vec.buf self)) (return (unit.star, Vec.mk (Vec.buf self ++ [value])))
+  sem.incr (list.length (Vec.buf self))
+    (return (unit.star, Vec.mk (Vec.buf self ++ [value])))
 
   -- note: `pop` never resizes the `Vec`, so it is always constant-time
   definition pop (self : Vec T) : sem (Vec T × Option T) :=
@@ -141,8 +142,8 @@ end «Vec<T>»
 in \rust{FixedBitSet::contains}. This is easy enough to implement using our abstraction.
 
 \begin{minted}{lean}
-definition «collections.vec.Vec<T> as core.ops.Deref».deref {T : Type₁} (self : Vec T) :
-  sem (slice T) :=
+definition «collections.vec.Vec<T> as core.ops.Deref».deref {T : Type₁}
+  (self : Vec T) : sem (slice T) :=
 return (Vec.buf self)
 \end{minted}
 
@@ -151,8 +152,8 @@ There is also a corresponding \rust{DerefMut} trait that makes \rust{&mut
 interesting because it has to return a lens focusing on \lean{Vec.buf}.
 
 \begin{minted}{lean}
-definition «collections.vec.Vec<T> as core.ops.DerefMut».deref_mut {T : Type₁} (self : Vec T) :
-  sem (lens (Vec T) (slice T) × Vec T) :=
+definition «collections.vec.Vec<T> as core.ops.DerefMut».deref_mut
+  {T : Type₁} (self : Vec T) : sem (lens (Vec T) (slice T) × Vec T) :=
 return (⦃lens, get := return ∘ Vec.buf, set := λ old, return ∘ Vec.mk⦄,
         self)
 \end{minted}
@@ -162,8 +163,8 @@ access \rust{[T]::get_unchecked_mut}, which in turn returns a mutable reference
 to a single slice element.
 
 \begin{minted}{lean}
-definition «[T]».get_unchecked_mut {T : Type₁} (self : slice T) (index : usize) :
-  sem (lens (slice T) T × slice T) :=
+definition «[T]».get_unchecked_mut {T : Type₁} (self : slice T)
+  (index : usize) : sem (lens (slice T) T × slice T) :=
 sem.guard (index < length self) (return (lens.index _ index, self))
 \end{minted}
 
@@ -191,7 +192,8 @@ essentially restating its implementation. Instead, we use it to \emph{build} an
 abstraction: We translate \rust{FixedBitSet} to a Lean set of indices.
 
 \begin{minted}{lean}
-abbreviation sem.returns {A : Type₁} (x : A) := sem.terminates_with (λ a, a = x)
+abbreviation sem.returns {A : Type₁} (x : A) :=
+sem.terminates_with (λ a, a = x)
 
 open FixedBitSet
 
@@ -230,7 +232,8 @@ invariant as a type class.
 
 \begin{minted}{lean}
 structure FixedBitSet' [class] (self : FixedBitSet) : Prop :=
-(length_eq : nat.div_ceil (length self) 32 = list.length (Vec.buf (data self)))
+(length_eq :
+  nat.div_ceil (length self) 32 = list.length (Vec.buf (data self)))
 \end{minted}
 
 This invariant should be fulfilled by the constructor, \rust{with_capacity}.

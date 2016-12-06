@@ -56,7 +56,8 @@ two types, we can give some general instances such as identity and composition.
 definition lens.id {Inner : Type₁} : lens Inner Inner :=
 ⦃lens, get := return, set := λ o, return⦄
 
-definition lens.comp {A B C : Type₁} (l₂ : lens B C) (l₁ : lens A B) : lens A C :=
+definition lens.comp {A B C : Type₁} (l₂ : lens B C) (l₁ : lens A B) :
+  lens A C :=
 ⦃lens, get := λ o,
   do o' ← lens.get l₁ o;
   lens.get l₂ o',
@@ -76,7 +77,8 @@ definition, but for other projections such as struct fields we will have to
 generate them at translation time.
 
 \begin{minted}{lean}
-definition lens.index (Inner : Type₁) (index : ℕ) : lens (slice Inner) Inner :=
+definition lens.index (Inner : Type₁) (index : ℕ) :
+  lens (slice Inner) Inner :=
 ⦃lens,
   get := λ o, sem.lift_opt (list.nth self o),
   set := λ o i, sem.lift_opt (list.update o index i)⦄
@@ -89,7 +91,7 @@ mutable reference, we compose with its lens to obtain a lens on the ultimate
 root variable. This combination of referencing and dereferencing is also known as ``reborrowing''.
 
 \begin{sbs1}
-let x: &mut [i32] = &mut a;
+let x: &mut [T] = &mut a;
 let y = &mut (*x)[1];
 \end{sbs1}
 \begin{sbs2}
@@ -153,7 +155,8 @@ is only correct because of the absence of mutable aliasing.
 fn f(x: &mut T) -> R {...}
 ...
 
-let x: &mut T = &mut ...a...;
+let x: &mut T =
+  &mut ...a...;
 let y = f(x);
 \end{sbs1}
 \begin{sbs2}
@@ -191,11 +194,13 @@ previous subsection.
 fn f(x: &mut T) -> &mut R {...}
 ...
 
-let x: &mut T = &mut ...a...;
+let x: &mut T =
+  &mut ...a...;
 let y = f(x);
 \end{sbs1}
 \begin{sbs2}
-definition f : (xₐ : T) : sem (lens T R × T) := ...
+definition f (xₐ : T) : sem (lens T R × T) :=
+...
 
 let x = ... in
 do tmp ← lens.get x a;

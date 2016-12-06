@@ -114,7 +114,8 @@ fn binary_search_by<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
 \caption{Implementation of the \rust{binary_search_by} method. A subslice
   \rust{s} of \rust{self} is iteratively bisected until it is empty or the
   element has been found. The \rust{tail[1..]} \emph{slicing syntax} is
-  syntax sugar for \rust{tail.index(RangeFrom{start:1})}.}
+  syntax sugar for calling the \rust{Index::index} trait method with a
+  \rust{RangeFrom} argument.}
 \label{lst:binary_search_by}
 \end{listing}
 
@@ -160,7 +161,8 @@ implement using our identification of slices with Lean lists.
 
 \begin{minted}{lean}
 -- Returns the number of elements in the slice.
-definition «[T] as core.slice.SliceExt».len {T : Type₁} (self : slice T) : sem nat :=
+definition «[T] as core.slice.SliceExt».len {T : Type₁} (self : slice T) :
+  sem nat :=
 return (list.length self)
 
 -- Implements slicing with syntax `&self[begin .. end]`.
@@ -168,9 +170,12 @@ return (list.length self)
 -- This operation is `O(1)`.
 -- Requires that `begin <= end` and `end <= self.len()`,
 -- otherwise slicing will panic.
-definition «[T] as core.ops.Index<core.ops.Range<usize>>».index {T : Type₁} (self : slice T) (index : Range usize) : sem (slice T) :=
-sem.guard (Range.start index ≤ Range.«end» index ∧ Range.«end» index ≤ list.length self)
-  (return (list.firstn (Range.«end» index - Range.start index) (list.dropn (Range.start index) self)))
+definition «[T] as core.ops.Index<core.ops.Range<usize>>».index {T : Type₁}
+  (self : slice T) (index : Range usize) : sem (slice T) :=
+sem.guard (Range.start index ≤ Range.«end» index ∧
+           Range.«end» index ≤ list.length self)
+  (return (list.firstn (Range.«end» index - Range.start index)
+          (list.dropn (Range.start index) self)))
 \end{minted}
 
 The latter method presents a
@@ -197,7 +202,8 @@ parameter self : slice T
 parameter needle : T -- a more descriptive name for the parameter `x`
 
 inductive binary_search_res : Result usize usize → Prop :=
-| found     : Πi, list.nth self i = some needle → binary_search_res (Result.Ok i)
+| found     : Πi, list.nth self i = some needle →
+  binary_search_res (Result.Ok i)
 | not_found : Πi, needle ∉ self → sorted (list.insert_at self i needle) →
   binary_search_res (Result.Err i)
 \end{minted}
@@ -212,12 +218,13 @@ implement Lean's own ordering type class. We therefore introduce a new type clas
 subclass of decidable, linear orders.
 
 \begin{minted}{lean}
-definition ordering {T : Type₁} [decidable_linear_order T] (x y : T) : cmp.Ordering :=
+definition ordering {T : Type₁} [decidable_linear_order T] (x y : T) :
+  cmp.Ordering :=
 if x < y then Ordering.Less
 else if x = y then Ordering.Equal
 else Ordering.Greater
 
-structure Ord' [class] (T : Type₁) extends Ord T, decidable_linear_order T :=
+structure Ord' [class] (T) extends Ord T, decidable_linear_order T :=
 (cmp_eq : ∀ x y : T, Σ k, Ord.cmp x y = some (ordering x y, k))
 \end{minted}
 
@@ -314,8 +321,8 @@ single iteration.
 
 \begin{minted}{lean}
 inductive loop_4_step : loop_4.state → Prop :=
-mk : Π base' s', loop_4_invar base' s' → length s' ≤ length s / 2 → length s ≠ 0 →
-  loop_4_step (f₀, base', s')
+mk : Π base' s', loop_4_invar base' s' → length s' ≤ length s / 2 →
+  length s ≠ 0 → loop_4_step (f₀, base', s')
 
 abbreviation loop_4_res := sum.rec (loop_4_step s) binary_search_res
 
